@@ -36,6 +36,8 @@ button, .botao { cursor: pointer; }
 .secao { padding: 35px 6%; }
 .titulo-secao { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .titulo-secao h2, .painel-criacao h2 { font-size: 27px; }
+.botao-desfazer { padding: 9px 12px; border: 1px solid #7a383e; border-radius: 7px; color: #ffb4b9; background: #352025; font-size: 13px; font-weight: 700; }
+.botao-desfazer:hover { filter: brightness(1.15); }
 .contador { color: var(--secundario); font-size: 13px; white-space: nowrap; }
 .carrossel { display: flex; gap: 18px; overflow-x: auto; padding: 5px 2px 18px; scroll-snap-type: x mandatory; }
 .carrossel::-webkit-scrollbar { height: 8px; }
@@ -83,6 +85,37 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
 .tabela-classificacao { width: 100%; border-collapse: collapse; min-width: 480px; }
 .tabela-classificacao th, .tabela-classificacao td { padding: 12px; text-align: left; border-bottom: 1px solid var(--borda); }
 .tabela-classificacao th { color: var(--verde); }
+.bloco-chaveamento { overflow-x: auto; background: var(--painel); border: 1px solid var(--borda); border-radius: 10px; padding: 18px; }
+.bloco-chaveamento > h3 { margin-bottom: 18px; }
+.chaveamento { display: flex; align-items: stretch; gap: 28px; min-width: max-content; padding-bottom: 6px; }
+.coluna-chave { width: 245px; display: flex; flex-direction: column; }
+.coluna-chave h4 { color: var(--verde); margin-bottom: 12px; }
+.coluna-terceiro h4 { color: #e4b36d; }
+.jogos-chave { display: flex; flex: 1; flex-direction: column; justify-content: space-around; gap: 18px; }
+.partida-chave { border: 1px solid var(--borda); border-radius: 7px; overflow: hidden; background: #111217; }
+.partida-chave.editavel { cursor: pointer; transition: border-color .2s, transform .2s; }
+.partida-chave.editavel:hover, .partida-chave.editavel:focus-visible { border-color: var(--verde); outline: none; transform: translateY(-2px); }
+.equipe-chave { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border-bottom: 1px solid #30323a; font-size: 14px; }
+.equipe-chave:last-of-type { border-bottom: 0; }
+.equipe-chave span { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.equipe-chave.vencedora { color: var(--verde); font-weight: 800; }
+.placar-chave { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 9px; border-top: 1px solid var(--borda); }
+.placar-chave input { width: 42px; padding: 6px 3px; text-align: center; color: var(--texto); background: #1b1c22; border: 1px solid #41434d; border-radius: 5px; }
+.placar-chave .botao-pequeno { padding: 6px 8px; font-size: 12px; }
+.partida-chave small { display: block; padding: 6px 10px; color: var(--secundario); font-size: 11px; border-top: 1px solid var(--borda); }
+.campeao p { color: var(--verde); font-size: 22px; font-weight: 800; }
+.modal-placar { width: min(92vw, 430px); margin: auto; padding: 0; color: var(--texto); background: var(--painel); border: 1px solid var(--borda); border-radius: 12px; }
+.modal-placar::backdrop { background: rgba(0, 0, 0, .7); }
+.painel-modal { padding: 22px; }
+.cabecalho-modal { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.fechar-modal { border: 0; color: var(--texto); background: transparent; font-size: 28px; line-height: 1; cursor: pointer; }
+.campos-placar-modal { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 10px; margin: 18px 0; }
+.campos-placar-modal label { display: grid; gap: 6px; color: var(--secundario); font-size: 13px; }
+.campos-placar-modal input { width: 100%; padding: 12px; color: var(--texto); text-align: center; background: #111217; border: 1px solid #41434d; border-radius: 7px; }
+.desistencia-modal { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 20px; color: var(--secundario); font-size: 13px; }
+.botao-desistencia { padding: 7px 9px; border: 1px solid #7a383e; border-radius: 6px; color: #ffb4b9; background: #352025; cursor: pointer; }
+.botao-desistencia:hover { filter: brightness(1.15); }
+.acoes-modal { display: flex; justify-content: flex-end; gap: 10px; }
 .mensagem-info { color: var(--secundario); padding: 15px 0; }
 @media (max-width: 650px) {
   .topo { flex-direction: column; align-items: flex-start; }
