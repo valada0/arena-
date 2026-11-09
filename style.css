@@ -99,6 +99,11 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
 .placar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .placar input { width: 58px; padding: 9px 5px; text-align: center; color: var(--texto); background: #111217; border: 1px solid #41434d; border-radius: 6px; }
 .botao-pequeno { padding: 9px 12px; border: 0; border-radius: 6px; color: #07170f; background: var(--verde); font-weight: 700; cursor: pointer; }
+.editor-quadra { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid var(--borda); }
+.editor-quadra label, .quadra-atribuida { color: var(--secundario); font-size: 13px; }
+.editor-quadra input { min-width: 0; width: 100%; padding: 8px 10px; color: var(--texto); background: #111217; border: 1px solid #41434d; border-radius: 6px; }
+.editor-quadra input:focus { border-color: var(--verde); outline: none; }
+.quadra-atribuida { grid-column: 1 / -1; margin: 0; }
 .tabela-scroll { overflow-x: auto; }
 .tabela-classificacao { width: 100%; border-collapse: collapse; min-width: 480px; }
 .tabela-classificacao th, .tabela-classificacao td { padding: 12px; text-align: left; border-bottom: 1px solid var(--borda); }
@@ -110,6 +115,7 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
 .coluna-chave h4 { color: var(--verde); margin-bottom: 12px; }
 .coluna-terceiro h4 { color: #e4b36d; }
 .jogos-chave { display: flex; flex: 1; flex-direction: column; justify-content: space-around; gap: 18px; }
+.partida-chave-wrapper { display: grid; gap: 6px; }
 .partida-chave { border: 1px solid var(--borda); border-radius: 7px; overflow: hidden; background: #111217; }
 .partida-chave.editavel { cursor: pointer; transition: border-color .2s, transform .2s; }
 .partida-chave.editavel:hover, .partida-chave.editavel:focus-visible { border-color: var(--verde); outline: none; transform: translateY(-2px); }
@@ -151,4 +157,5 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
   .bloco-jogo { grid-template-columns: 1fr; text-align: center; }
   .nome-equipe:last-of-type { text-align: center; }
   .placar { justify-content: center; }
+  .editor-quadra { grid-template-columns: 1fr; }
 }

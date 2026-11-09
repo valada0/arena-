@@ -370,6 +370,30 @@ function atualizarFasesConcluidas() {
     fase.concluida = todosJogosConcluidos(todosOsJogos(fase));
   });
 }
+function renderizarCampoQuadra(jogo) {
+  if (usuarioPodeEditar()) {
+    return `<div class="editor-quadra">
+      <label for="quadra-${jogo.id}">Quadra</label>
+      <input id="quadra-${jogo.id}" type="text" maxlength="40" data-quadra="${jogo.id}"
+        value="${escapar(jogo.quadra || "")}" placeholder="Ex.: Quadra 1">
+      <button class="botao-pequeno" type="button" data-salvar-quadra="${jogo.id}">Salvar quadra</button>
+    </div>`;
+  }
+  return jogo.quadra
+    ? `<p class="quadra-atribuida">Quadra: <strong>${escapar(jogo.quadra)}</strong></p>`
+    : "";
+}
+function salvarQuadra(idJogo) {
+  if (!usuarioPodeEditar()) return;
+  const jogo = campeonato.fases.flatMap(todosOsJogos).find((item) => item.id === idJogo);
+  const campo = document.querySelector(`[data-quadra="${idJogo}"]`);
+  if (!jogo || !campo) return;
+  const quadra = campo.value.trim();
+  if (quadra) jogo.quadra = quadra;
+  else delete jogo.quadra;
+  salvarDados();
+  renderizar();
+}
 function renderizarJogos(jogos) {
   if (!jogos.length) return '<p class="mensagem-info">Não há jogos nesta fase.</p>';
   const podeEditarJogo = usuarioPodeEditar();
@@ -393,6 +417,7 @@ function renderizarJogos(jogos) {
       <div class="placar">${placarHtml}</div>
       <div class="nome-equipe">${jogo.equipeB ? escapar(jogo.equipeB) : "Avança automaticamente"}</div>
       ${concluido ? `<small>Resultado registrado${vencedorDoJogo(jogo) ? " • Vencedor: " + escapar(vencedorDoJogo(jogo)) : " • Empate"}</small>` : ""}
+      ${jogo.folga ? "" : renderizarCampoQuadra(jogo)}
     </article>`;
   }).join("")}</div>`;
 }
@@ -456,7 +481,7 @@ function renderizarChaveamento() {
       const podeEditarJogo = usuarioPodeEditar();
       const atributoEditavel = podeEditarJogo && !jogo.folga ? `data-editar-jogo="${jogo.id}" tabindex="0" role="button" aria-label="Editar placar de ${escapar(jogo.equipeA)} contra ${escapar(jogo.equipeB)}"` : "";
       const classeEditavel = podeEditarJogo && !jogo.folga ? "editavel" : "";
-      return `<article class="partida-chave ${classeEditavel}" ${atributoEditavel}><div class="equipe-chave ${vencedor === jogo.equipeA ? "vencedora" : ""}"><span>${escapar(jogo.equipeA)}</span><strong>${jogo.folga ? "-" : jogoConcluido(jogo) ? jogo.placarA : "-"}</strong></div><div class="equipe-chave ${vencedor === jogo.equipeB ? "vencedora" : ""}"><span>${jogo.equipeB ? escapar(jogo.equipeB) : "Folga"}</span><strong>${jogo.folga ? "" : jogoConcluido(jogo) ? jogo.placarB : "-"}</strong></div><small>${jogo.folga ? "Avanço automático" : jogo.desistente ? "Vitória por desistência" : jogoConcluido(jogo) ? (podeEditarJogo ? "Clique para editar" : "Resultado registrado") : (podeEditarJogo ? "Clique para registrar o placar" : "Aguardando resultado")}</small></article>`;
+      return `<div class="partida-chave-wrapper"><article class="partida-chave ${classeEditavel}" ${atributoEditavel}><div class="equipe-chave ${vencedor === jogo.equipeA ? "vencedora" : ""}"><span>${escapar(jogo.equipeA)}</span><strong>${jogo.folga ? "-" : jogoConcluido(jogo) ? jogo.placarA : "-"}</strong></div><div class="equipe-chave ${vencedor === jogo.equipeB ? "vencedora" : ""}"><span>${jogo.equipeB ? escapar(jogo.equipeB) : "Folga"}</span><strong>${jogo.folga ? "" : jogoConcluido(jogo) ? jogo.placarB : "-"}</strong></div><small>${jogo.folga ? "Avanço automático" : jogo.desistente ? "Vitória por desistência" : jogoConcluido(jogo) ? (podeEditarJogo ? "Clique para editar" : "Resultado registrado") : (podeEditarJogo ? "Clique para registrar o placar" : "Aguardando resultado")}</small></article>${jogo.folga ? "" : renderizarCampoQuadra(jogo)}</div>`;
     }).join("")}</div></div>`).join("")}</div></section>`;
     const ultima = fasesMata[fasesMata.length - 1];
     if (campeonato.formato === "dupla" && campeonato.status === "finalizado") {
@@ -677,6 +702,9 @@ function renderizar() {
 
   conteudo.querySelectorAll("[data-salvar-jogo]").forEach((botao) => {
     botao.addEventListener("click", () => salvarPlacar(botao.dataset.salvarJogo));
+  });
+  conteudo.querySelectorAll("[data-salvar-quadra]").forEach((botao) => {
+    botao.addEventListener("click", () => salvarQuadra(botao.dataset.salvarQuadra));
   });
   conteudo.querySelectorAll("[data-editar-jogo]").forEach((card) => {
     card.addEventListener("click", () => abrirModalPlacar(card.dataset.editarJogo));
