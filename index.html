@@ -25,6 +25,38 @@
       <a href="#criar" class="botao">+ Criar campeonato</a>
     </section>
 
+    <section class="secao auth-panel" aria-label="Área de conta">
+      <div class="titulo-secao">
+        <div>
+          <h2>Minha conta</h2>
+          <p>Entre para criar, inscrever-se e acompanhar competições.</p>
+        </div>
+        <button id="logoutBtn" class="botao-secundario" hidden>Sair</button>
+      </div>
+
+      <div id="usuarioStatus" class="status-usuario" hidden>
+        <span>Conectado como</span>
+        <strong id="usuarioNomeLogado">Usuário</strong>
+      </div>
+
+      <div id="authAnonimo" class="auth-grid">
+        <form id="formCadastro" class="form-auth">
+          <h3>Criar conta</h3>
+          <input id="cadastroNome" type="text" placeholder="Seu nome" maxlength="60" required>
+          <input id="cadastroEmail" type="email" placeholder="E-mail" required>
+          <input id="cadastroSenha" type="password" placeholder="Senha" minlength="6" required>
+          <button type="submit" class="botao">Criar conta</button>
+        </form>
+
+        <form id="formLogin" class="form-auth">
+          <h3>Entrar</h3>
+          <input id="loginEmail" type="email" placeholder="E-mail" required>
+          <input id="loginSenha" type="password" placeholder="Senha" required>
+          <button type="submit" class="botao botao-secundario-dark">Entrar</button>
+        </form>
+      </div>
+    </section>
+
     <section id="destaqueCampeonato" class="destaque" hidden>
       <div id="capaDestaque" class="capa-destaque">
         <div class="conteudo-destaque">
@@ -78,14 +110,11 @@
         <select id="formato" required>
           <option value="todos">Todos contra todos</option>
           <option value="mata">Mata-mata</option>
+          <option value="dupla">Mata-mata de eliminação dupla</option>
           <option value="grupos">Fase de grupos + mata-mata</option>
         </select>
 
-        <label for="participantes">Participantes</label>
-        <p class="ajuda">Digite um nome por linha. Podem ser pessoas, duplas ou equipes.</p>
-        <textarea id="participantes" rows="7"
-          placeholder="Dupla 1&#10;Dupla 2&#10;Dupla 3&#10;Dupla 4"
-          required></textarea>
+        <p class="ajuda">Os participantes poderão se inscrever no campeonato depois que ele for criado.</p>
 
         <button type="submit" class="botao">Criar campeonato</button>
       </form>

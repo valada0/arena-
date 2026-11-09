@@ -15,7 +15,10 @@
   <main>
     <section class="apresentacao">
       <span class="etiqueta">CENTRAL DA COMPETIÇÃO</span>
-      <h1 id="tituloCampeonato">Carregando campeonato...</h1>
+      <div class="titulo-linha">
+        <h1 id="tituloCampeonato">Carregando campeonato...</h1>
+        <span id="statusCampeonato" class="status-badge" hidden>AO VIVO</span>
+      </div>
       <p id="infoCampeonato"></p>
     </section>
     <section class="secao">
@@ -24,7 +27,10 @@
           <h2>Gerenciar campeonato</h2>
           <p>Registre resultados e acompanhe a competição.</p>
         </div>
-        <button class="botao-desfazer" id="desfazerCampeonato">Desfazer campeonato</button>
+        <div class="acoes-campeonato">
+          <button class="botao" id="iniciarCampeonato" hidden>Iniciar campeonato</button>
+          <button class="botao-desfazer" id="desfazerCampeonato">Desfazer campeonato</button>
+        </div>
       </div>
       <div class="abas">
         <button class="aba ativa" data-aba="jogos">Jogos</button>

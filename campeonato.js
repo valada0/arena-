@@ -1,8 +1,11 @@
 const CHAVE = "meu-campeonato-v1";
+const USUARIOS_KEY = "arena-usuarios-v1";
+const SESSAO_KEY = "arena-sessao-v1";
 const parametros = new URLSearchParams(window.location.search);
 const idCampeonato = parametros.get("id");
 let campeonatos = carregarDados();
 let campeonato = campeonatos.find((item) => item.id === idCampeonato);
+let usuarioAtual = carregarSessao();
 let abaAtual = "jogos";
 let jogoModalAtual = null;
 
@@ -15,11 +18,63 @@ function carregarDados() {
 function salvarDados() {
   localStorage.setItem(CHAVE, JSON.stringify(campeonatos));
 }
+function carregarSessao() {
+  try {
+    const id = localStorage.getItem(SESSAO_KEY);
+    if (!id) return null;
+    const usuarios = JSON.parse(localStorage.getItem(USUARIOS_KEY) || "[]");
+    return Array.isArray(usuarios) ? usuarios.find((usuario) => usuario.id === id) || null : null;
+  } catch {
+    return null;
+  }
+}
+function usuarioPodeEditar() {
+  return !!usuarioAtual && !!campeonato && campeonato.criadorId === usuarioAtual.id;
+}
+function usuarioInscrito() {
+  if (!usuarioAtual || !campeonato) return false;
+  return campeonato.inscritos?.some((inscrito) => inscrito.userId === usuarioAtual.id) || false;
+}
+function campeonatoEmAndamento() {
+  return !!campeonato && (campeonato.status === "ao-vivo" || campeonato.status === "finalizado");
+}
+function iniciarCampeonato() {
+  if (!campeonato) return;
+  if (!usuarioPodeEditar()) {
+    alert("Somente o criador do campeonato pode iniciá-lo.");
+    return;
+  }
+  if (campeonato.status === "ao-vivo") {
+    alert("Este campeonato já está ao vivo.");
+    return;
+  }
+  campeonato.participantes = campeonato.participantes || [];
+  if (campeonato.participantes.length < 2) {
+    alert("São necessários pelo menos 2 participantes inscritos para iniciar.");
+    return;
+  }
+  if (campeonato.formato === "grupos" && campeonato.participantes.length < 4) {
+    alert("O formato de grupos precisa de pelo menos 4 participantes inscritos.");
+    return;
+  }
+
+  campeonato.status = "ao-vivo";
+  if (!Array.isArray(campeonato.fases) || campeonato.fases.length === 0) {
+    prepararCampeonato();
+  }
+  salvarDados();
+  renderizar();
+}
 function desfazerCampeonato() {
   if (!campeonato) return;
+  if (!usuarioPodeEditar()) {
+    alert("Somente o criador pode desfazer o campeonato.");
+    return;
+  }
   const confirmar = confirm("Deseja desfazer o andamento deste campeonato? Todos os placares e fases geradas serão removidos.");
   if (!confirmar) return;
   campeonato.fases = [];
+  campeonato.status = "rascunho";
   prepararCampeonato();
   atualizarFasesConcluidas();
   salvarDados();
@@ -36,6 +91,7 @@ function escapar(texto) {
 }
 function nomeFormato(formato) {
   if (formato === "mata") return "Mata-mata";
+  if (formato === "dupla") return "Eliminação dupla";
   if (formato === "grupos") return "Fase de grupos + mata-mata";
   return "Todos contra todos";
 }
@@ -88,6 +144,131 @@ function criarMataMata(participantes, nome = "Mata-mata") {
   }
   return { nome, tipo: "mata", jogos, concluida: false };
 }
+function criarFaseDupla(participantes, tipo, rodada, nome) {
+  const jogos = [];
+  for (let indice = 0; indice < participantes.length; indice += 2) {
+    const equipeA = participantes[indice];
+    const equipeB = participantes[indice + 1];
+    if (!equipeA && !equipeB) continue;
+    if (!equipeA || !equipeB) {
+      const equipe = equipeA || equipeB;
+      jogos.push({
+        id: gerarId(), rodada, equipeA: equipe, equipeB: null,
+        placarA: null, placarB: null, vencedor: equipe, folga: true
+      });
+      continue;
+    }
+    jogos.push({
+      id: gerarId(), rodada, equipeA, equipeB,
+      placarA: null, placarB: null
+    });
+  }
+  return { nome, tipo, rodada, jogos, concluida: false };
+}
+function fasesDupla(tipo) {
+  return campeonato.fases.filter((fase) => fase.tipo === tipo).sort((a, b) => a.rodada - b.rodada);
+}
+function confrontosDupla(participantes, tipo, rodada, nome) {
+  if (!participantes.length) return null;
+  return criarFaseDupla(participantes, tipo, rodada, nome);
+}
+function nomeRodadaDupla(tipo, rodada) {
+  const descricao = tipo === "dupla-vencedores" ? "Chave dos vencedores" : "Chave dos perdedores";
+  return `${descricao} - Rodada ${rodada}`;
+}
+function campeonatoDuplaProntoParaAvancar() {
+  const fases = campeonato.fases.filter((fase) => fase.tipo.startsWith("dupla-"));
+  return fases.length > 0 && fases.every((fase) => fase.concluida);
+}
+function avancarEliminacaoDupla() {
+  if (!usuarioPodeEditar()) {
+    alert("Somente o criador pode avançar as chaves.");
+    return;
+  }
+  if (!campeonatoDuplaProntoParaAvancar()) {
+    alert("Registre todos os resultados disponíveis antes de avançar.");
+    return;
+  }
+
+  const vencedores = fasesDupla("dupla-vencedores");
+  const perdedores = fasesDupla("dupla-perdedores");
+  const finais = fasesDupla("dupla-final");
+  const totalRodadasVencedores = Math.ceil(Math.log2(campeonato.participantes.length));
+  const totalRodadasPerdedores = 2 * (totalRodadasVencedores - 1);
+  const ultimaVencedores = vencedores[vencedores.length - 1];
+  const ultimaPerdedores = perdedores[perdedores.length - 1];
+
+  if (finais.length) {
+    const vencedorFinal = vencedorDoJogo(finais[finais.length - 1].jogos[0]);
+    if (finais.length > 1 || vencedorFinal === vencedorDoJogo(ultimaVencedores.jogos[0])) {
+      campeonato.status = "finalizado";
+      salvarDados(); renderizar();
+      alert("Campeonato finalizado! Campeão: " + vencedorFinal);
+      return;
+    }
+    campeonato.fases.push(criarFaseDupla(
+      [vencedorDoJogo(ultimaVencedores.jogos[0]), vencedorFinal],
+      "dupla-final", 2, "Final de desempate"
+    ));
+    salvarDados(); renderizar();
+    return;
+  }
+
+  if (ultimaVencedores.rodada < totalRodadasVencedores) {
+    const rodada = ultimaVencedores.rodada;
+    campeonato.fases.push(criarFaseDupla(
+      ultimaVencedores.jogos.map(vencedorDoJogo).filter(Boolean),
+      "dupla-vencedores", rodada + 1,
+      nomeRodadaDupla("dupla-vencedores", rodada + 1)
+    ));
+
+    let timesPerdedores;
+    if (rodada === 1) {
+      timesPerdedores = ultimaVencedores.jogos.map(perdedorDoJogo).filter(Boolean);
+    } else if (rodada % 2 === 0) {
+      const rodadaOrigem = rodada / 2 + 1;
+      const faseOrigem = vencedores.find((fase) => fase.rodada === rodadaOrigem);
+      timesPerdedores = [
+        ...ultimaPerdedores.jogos.map(vencedorDoJogo).filter(Boolean),
+        ...faseOrigem.jogos.map(perdedorDoJogo).filter(Boolean)
+      ];
+    } else {
+      timesPerdedores = ultimaPerdedores.jogos.map(vencedorDoJogo).filter(Boolean);
+    }
+    const fasePerdedores = confrontosDupla(
+      timesPerdedores, "dupla-perdedores", rodada,
+      nomeRodadaDupla("dupla-perdedores", rodada)
+    );
+    if (fasePerdedores) campeonato.fases.push(fasePerdedores);
+  } else if (ultimaPerdedores && ultimaPerdedores.rodada < totalRodadasPerdedores) {
+    const rodada = ultimaPerdedores.rodada + 1;
+    let timesPerdedores;
+    if (rodada % 2 === 0) {
+      const rodadaOrigem = rodada / 2 + 1;
+      const faseOrigem = vencedores.find((fase) => fase.rodada === rodadaOrigem);
+      timesPerdedores = [
+        ...ultimaPerdedores.jogos.map(vencedorDoJogo).filter(Boolean),
+        ...faseOrigem.jogos.map(perdedorDoJogo).filter(Boolean)
+      ];
+    } else {
+      timesPerdedores = ultimaPerdedores.jogos.map(vencedorDoJogo).filter(Boolean);
+    }
+    const fasePerdedores = confrontosDupla(
+      timesPerdedores, "dupla-perdedores", rodada,
+      nomeRodadaDupla("dupla-perdedores", rodada)
+    );
+    if (fasePerdedores) campeonato.fases.push(fasePerdedores);
+  } else {
+    const campeaoVencedores = vencedorDoJogo(ultimaVencedores.jogos[0]);
+    const campeaoPerdedores = ultimaPerdedores
+      ? vencedorDoJogo(ultimaPerdedores.jogos[0])
+      : perdedorDoJogo(ultimaVencedores.jogos[0]);
+    campeonato.fases.push(criarFaseDupla(
+      [campeaoVencedores, campeaoPerdedores], "dupla-final", 1, "Grande final"
+    ));
+  }
+  salvarDados(); renderizar();
+}
 function prepararCampeonato() {
   if (!campeonato) return;
   if (!Array.isArray(campeonato.fases)) campeonato.fases = [];
@@ -101,6 +282,14 @@ function prepararCampeonato() {
     });
   } else if (campeonato.formato === "mata") {
     campeonato.fases.push(criarMataMata(campeonato.participantes));
+  } else if (campeonato.formato === "dupla") {
+    const participantes = embaralhar(campeonato.participantes);
+    const tamanhoChave = 2 ** Math.ceil(Math.log2(participantes.length));
+    while (participantes.length < tamanhoChave) participantes.push(null);
+    campeonato.fases.push(criarFaseDupla(
+      participantes, "dupla-vencedores", 1,
+      nomeRodadaDupla("dupla-vencedores", 1)
+    ));
   } else {
     const participantes = embaralhar(campeonato.participantes);
     const quantidadeGrupos = participantes.length >= 8 ? 4 : 2;
@@ -175,18 +364,25 @@ function atualizarFasesConcluidas() {
 }
 function renderizarJogos(jogos) {
   if (!jogos.length) return '<p class="mensagem-info">Não há jogos nesta fase.</p>';
+  const podeEditarJogo = usuarioPodeEditar();
   return `<div class="lista-jogos">${jogos.map((jogo) => {
     const concluido = jogoConcluido(jogo);
-    return `<article class="bloco-jogo">
-      <div class="nome-equipe">${escapar(jogo.equipeA)}</div>
-      <div class="placar">${jogo.folga ? "<strong>Folga</strong>" : `
+    const exibicaoA = jogo.folga ? "-" : concluido ? jogo.placarA : "-";
+    const exibicaoB = jogo.folga ? "" : concluido ? jogo.placarB : "-";
+    const placarHtml = jogo.folga
+      ? "<strong>Folga</strong>"
+      : podeEditarJogo
+        ? `
         <input type="number" min="0" step="1" aria-label="Placar de ${escapar(jogo.equipeA)}"
           data-jogo="${jogo.id}" data-lado="A" value="${concluido ? jogo.placarA : ""}" placeholder="-">
         <span>:</span>
         <input type="number" min="0" step="1" aria-label="Placar de ${escapar(jogo.equipeB)}"
           data-jogo="${jogo.id}" data-lado="B" value="${concluido ? jogo.placarB : ""}" placeholder="-">
-        <button class="botao-pequeno" data-salvar-jogo="${jogo.id}">Salvar</button>`}
-      </div>
+        <button class="botao-pequeno" data-salvar-jogo="${jogo.id}">Salvar</button>`
+        : `<span>${exibicaoA}</span><span>:</span><span>${exibicaoB}</span>`;
+    return `<article class="bloco-jogo">
+      <div class="nome-equipe">${escapar(jogo.equipeA)}</div>
+      <div class="placar">${placarHtml}</div>
       <div class="nome-equipe">${jogo.equipeB ? escapar(jogo.equipeB) : "Avança automaticamente"}</div>
       ${concluido ? `<small>Resultado registrado${vencedorDoJogo(jogo) ? " • Vencedor: " + escapar(vencedorDoJogo(jogo)) : " • Empate"}</small>` : ""}
     </article>`;
@@ -203,12 +399,14 @@ function renderizarTabela(participantes, jogos) {
     </tr>`).join("")}</tbody></table></div>`;
 }
 function renderizarJogosAba() {
-  return campeonato.fases.map((fase) => `<section class="bloco-fase">
+  const resumo = renderizarFases();
+  const fases = campeonato.fases.map((fase) => `<section class="bloco-fase">
     <h3>${escapar(fase.nome)}</h3>
     ${fase.tipo === "grupos"
       ? fase.grupos.map((grupo) => `<h4>${escapar(grupo.nome)}</h4>${renderizarJogos(grupo.jogos)}`).join("")
       : renderizarJogos(fase.jogos)}
   </section>`).join("");
+  return `${resumo}${fases}`;
 }
 function renderizarClassificacao() {
   const html = campeonato.fases.map((fase) => {
@@ -233,17 +431,25 @@ function nomeRodada(indice) {
 }
 function renderizarChaveamento() {
   const fasesMata = campeonato.fases.filter((fase) => fase.tipo === "mata");
-  const fasesChave = [...fasesMata, ...campeonato.fases.filter((fase) => fase.tipo === "terceiro")];
+  const fasesChave = campeonato.formato === "dupla"
+    ? campeonato.fases.filter((fase) => fase.tipo.startsWith("dupla-"))
+    : [...fasesMata, ...campeonato.fases.filter((fase) => fase.tipo === "terceiro")];
   const faseGrupos = campeonato.fases.find((fase) => fase.tipo === "grupos");
   let html = "";
-  if (faseGrupos && !fasesMata.length) html += `<section class="bloco-fase"><h3>Classificar para o mata-mata</h3><p class="mensagem-info">Quando os grupos terminarem, os dois primeiros de cada grupo avançam ao chaveamento.</p><button class="botao" id="gerarMata">Gerar chaveamento</button></section>`;
+  if (usuarioPodeEditar() && faseGrupos && !fasesMata.length) html += `<section class="bloco-fase"><h3>Classificar para o mata-mata</h3><p class="mensagem-info">Quando os grupos terminarem, os dois primeiros de cada grupo avançam ao chaveamento.</p><button class="botao" id="gerarMata">Gerar chaveamento</button></section>`;
   if (fasesChave.length) {
-    html += `<section class="bloco-chaveamento"><h3>Chaveamento eliminatório</h3><div class="chaveamento">${fasesChave.map((fase, indice) => `<div class="coluna-chave ${fase.tipo === "terceiro" ? "coluna-terceiro" : ""}"><h4>${escapar(fase.nome === "Mata-mata" ? nomeRodada(indice) : fase.nome)}</h4><div class="jogos-chave">${fase.jogos.map((jogo) => {
+    html += `<section class="bloco-chaveamento"><h3>${campeonato.formato === "dupla" ? "Chave dos vencedores e dos perdedores" : "Chaveamento eliminatório"}</h3><div class="chaveamento">${fasesChave.map((fase, indice) => `<div class="coluna-chave ${fase.tipo === "terceiro" ? "coluna-terceiro" : ""}"><h4>${escapar(campeonato.formato === "dupla" || fase.nome !== "Mata-mata" ? fase.nome : nomeRodada(indice))}</h4><div class="jogos-chave">${fase.jogos.map((jogo) => {
       const vencedor = vencedorDoJogo(jogo);
-      return `<article class="partida-chave ${jogo.folga ? "" : "editavel"}" ${jogo.folga ? "" : `data-editar-jogo="${jogo.id}" tabindex="0" role="button" aria-label="Editar placar de ${escapar(jogo.equipeA)} contra ${escapar(jogo.equipeB)}"`}><div class="equipe-chave ${vencedor === jogo.equipeA ? "vencedora" : ""}"><span>${escapar(jogo.equipeA)}</span><strong>${jogo.folga ? "-" : jogoConcluido(jogo) ? jogo.placarA : "-"}</strong></div><div class="equipe-chave ${vencedor === jogo.equipeB ? "vencedora" : ""}"><span>${jogo.equipeB ? escapar(jogo.equipeB) : "Folga"}</span><strong>${jogo.folga ? "" : jogoConcluido(jogo) ? jogo.placarB : "-"}</strong></div><small>${jogo.folga ? "Avanço automático" : jogo.desistente ? "Vitória por desistência" : jogoConcluido(jogo) ? "Clique para editar" : "Clique para registrar o placar"}</small></article>`;
+      const podeEditarJogo = usuarioPodeEditar();
+      const atributoEditavel = podeEditarJogo && !jogo.folga ? `data-editar-jogo="${jogo.id}" tabindex="0" role="button" aria-label="Editar placar de ${escapar(jogo.equipeA)} contra ${escapar(jogo.equipeB)}"` : "";
+      const classeEditavel = podeEditarJogo && !jogo.folga ? "editavel" : "";
+      return `<article class="partida-chave ${classeEditavel}" ${atributoEditavel}><div class="equipe-chave ${vencedor === jogo.equipeA ? "vencedora" : ""}"><span>${escapar(jogo.equipeA)}</span><strong>${jogo.folga ? "-" : jogoConcluido(jogo) ? jogo.placarA : "-"}</strong></div><div class="equipe-chave ${vencedor === jogo.equipeB ? "vencedora" : ""}"><span>${jogo.equipeB ? escapar(jogo.equipeB) : "Folga"}</span><strong>${jogo.folga ? "" : jogoConcluido(jogo) ? jogo.placarB : "-"}</strong></div><small>${jogo.folga ? "Avanço automático" : jogo.desistente ? "Vitória por desistência" : jogoConcluido(jogo) ? (podeEditarJogo ? "Clique para editar" : "Resultado registrado") : (podeEditarJogo ? "Clique para registrar o placar" : "Aguardando resultado")}</small></article>`;
     }).join("")}</div></div>`).join("")}</div></section>`;
     const ultima = fasesMata[fasesMata.length - 1];
-    if (ultima.concluida) {
+    if (campeonato.formato === "dupla" && campeonato.status === "finalizado") {
+      const faseFinal = fasesDupla("dupla-final").at(-1);
+      html += `<section class="bloco-fase campeao"><h3>Campeão</h3><p>${escapar(vencedorDoJogo(faseFinal.jogos[0]))}</p></section>`;
+    } else if (campeonato.formato !== "dupla" && usuarioPodeEditar() && ultima?.concluida) {
       const vencedores = ultima.jogos.map(vencedorDoJogo).filter(Boolean);
       html += vencedores.length === 1 ? `<section class="bloco-fase campeao"><h3>Campeão</h3><p>${escapar(vencedores[0])}</p></section>` : `<section class="bloco-fase"><h3>Próxima rodada</h3><button class="botao" id="gerarProximaRodada">Gerar próxima rodada</button></section>`;
     }
@@ -251,6 +457,10 @@ function renderizarChaveamento() {
   return html || '<p class="mensagem-info">O chaveamento aparecerá quando a fase eliminatória for criada.</p>';
 }
 function gerarMataMataDosGrupos() {
+  if (!usuarioPodeEditar()) {
+    alert("Somente o criador pode gerar o mata-mata.");
+    return;
+  }
   const fase = campeonato.fases.find((f) => f.tipo === "grupos");
   if (!fase || !fase.concluida) {
     alert("Registre todos os resultados da fase de grupos primeiro.");
@@ -273,6 +483,10 @@ function gerarMataMataDosGrupos() {
   salvarDados(); renderizar();
 }
 function gerarProximaRodada() {
+  if (!usuarioPodeEditar()) {
+    alert("Somente o criador pode gerar a próxima rodada.");
+    return;
+  }
   const fase = [...campeonato.fases].reverse().find((f) => f.tipo === "mata");
   if (!fase || !fase.concluida) {
     alert("Registre todos os resultados desta rodada antes de avançar.");
@@ -298,6 +512,10 @@ function gerarProximaRodada() {
   salvarDados(); renderizar();
 }
 function salvarPlacar(idJogo) {
+  if (!usuarioPodeEditar()) {
+    alert("Somente o criador pode registrar placares.");
+    return;
+  }
   const inputs = [...document.querySelectorAll(`[data-jogo="${idJogo}"]`)];
   const inputA = inputs.find((i) => i.dataset.lado === "A");
   const inputB = inputs.find((i) => i.dataset.lado === "B");
@@ -322,6 +540,10 @@ function salvarPlacar(idJogo) {
   salvarDados(); renderizar();
 }
 function abrirModalPlacar(idJogo) {
+  if (!usuarioPodeEditar()) {
+    alert("Somente o criador pode editar o placar.");
+    return;
+  }
   const jogo = campeonato.fases.flatMap(todosOsJogos).find((item) => item.id === idJogo);
   if (!jogo || jogo.folga) return;
   jogoModalAtual = jogo;
@@ -336,7 +558,7 @@ function abrirModalPlacar(idJogo) {
 }
 function salvarPlacarModal(evento) {
   evento.preventDefault();
-  if (!jogoModalAtual) return;
+  if (!jogoModalAtual || !usuarioPodeEditar()) return;
   const inputA = document.getElementById("placarAModal");
   const inputB = document.getElementById("placarBModal");
   const pa = Number(inputA.value), pb = Number(inputB.value);
@@ -358,7 +580,7 @@ function salvarPlacarModal(evento) {
   renderizar();
 }
 function registrarDesistencia(lado) {
-  if (!jogoModalAtual) return;
+  if (!jogoModalAtual || !usuarioPodeEditar()) return;
   const equipeDesistente = lado === "A" ? jogoModalAtual.equipeA : jogoModalAtual.equipeB;
   if (!confirm(`Confirmar a desistência de ${equipeDesistente}?`)) return;
   jogoModalAtual.desistente = equipeDesistente;
@@ -377,21 +599,27 @@ function renderizarFases() {
     ).join("")}</section>`;
   const faseGrupos = campeonato.fases.find((f) => f.tipo === "grupos");
   const faseMata = [...campeonato.fases].reverse().find((f) => f.tipo === "mata");
-  if (faseGrupos && !faseMata) {
-    html += `<section class="bloco-fase"><h3>Classificar para o mata-mata</h3>
-      <p class="mensagem-info">Quando todos os jogos dos grupos tiverem resultados, os dois primeiros de cada grupo avançam.</p>
-      <button class="botao" id="gerarMata">Gerar mata-mata</button></section>`;
-  }
-  if (faseMata && faseMata.concluida) {
-    const vencedores = faseMata.jogos.map(vencedorDoJogo).filter(Boolean);
-    if (vencedores.length === 1) {
-      html += `<section class="bloco-fase"><h3>🏆 Campeão</h3><p>${escapar(vencedores[0])}</p></section>`;
-    } else {
-      html += `<section class="bloco-fase"><h3>Próxima rodada</h3>
-        <button class="botao" id="gerarProximaRodada">Gerar próxima rodada</button></section>`;
+  if (usuarioPodeEditar()) {
+    if (campeonato.formato === "dupla" && campeonato.status !== "finalizado" && campeonatoDuplaProntoParaAvancar()) {
+      html += `<section class="bloco-fase"><h3>Avançar eliminação dupla</h3>
+        <p class="mensagem-info">Todas as partidas desta etapa foram concluídas.</p>
+        <button class="botao" id="avancarDupla">Gerar próxima rodada</button></section>`;
+    } else if (campeonato.formato !== "dupla" && faseGrupos && !faseMata) {
+      html += `<section class="bloco-fase"><h3>Classificar para o mata-mata</h3>
+        <p class="mensagem-info">Quando todos os jogos dos grupos tiverem resultados, os dois primeiros de cada grupo avançam.</p>
+        <button class="botao" id="gerarMata">Gerar mata-mata</button></section>`;
     }
-  } else if (faseMata) {
-    html += `<section class="bloco-fase"><p class="mensagem-info">Registre todos os placares da rodada para avançar.</p></section>`;
+    if (faseMata && faseMata.concluida) {
+      const vencedores = faseMata.jogos.map(vencedorDoJogo).filter(Boolean);
+      if (vencedores.length === 1) {
+        html += `<section class="bloco-fase"><h3>🏆 Campeão</h3><p>${escapar(vencedores[0])}</p></section>`;
+      } else {
+        html += `<section class="bloco-fase"><h3>Próxima rodada</h3>
+          <button class="botao" id="gerarProximaRodada">Gerar próxima rodada</button></section>`;
+      }
+    } else if (faseMata) {
+      html += `<section class="bloco-fase"><p class="mensagem-info">Registre todos os placares da rodada para avançar.</p></section>`;
+    }
   }
   return html;
 }
@@ -415,8 +643,22 @@ function renderizar() {
   document.getElementById("tituloCampeonato").textContent = campeonato.nome;
   document.getElementById("infoCampeonato").textContent =
     campeonato.modalidade + " • " + campeonato.participantes.length +
-    " participantes • " + nomeFormato(campeonato.formato);
+    " participantes • " + nomeFormato(campeonato.formato) + (campeonato.status === "ao-vivo" ? " • AO VIVO" : "");
+  const statusBadge = document.getElementById("statusCampeonato");
+  if (statusBadge) statusBadge.hidden = campeonato.status !== "ao-vivo";
+  const iniciarBtn = document.getElementById("iniciarCampeonato");
+  if (iniciarBtn) iniciarBtn.hidden = !(usuarioPodeEditar() && campeonato.status === "rascunho");
+  const desfazerBtn = document.getElementById("desfazerCampeonato");
+  if (desfazerBtn) desfazerBtn.hidden = !usuarioPodeEditar();
+
   const conteudo = document.getElementById("conteudoCampeonato");
+  const restritoAntesDoInicio = !campeonatoEmAndamento() && !usuarioPodeEditar();
+
+  if (restritoAntesDoInicio) {
+    conteudo.innerHTML = '<p class="mensagem-info">Este campeonato ainda não foi iniciado pelo autor. Acompanhe a página no momento em que o criador clicar em iniciar.</p>';
+    return;
+  }
+
   if (abaAtual === "jogos") conteudo.innerHTML = renderizarJogosAba();
   else if (abaAtual === "classificacao") conteudo.innerHTML = renderizarClassificacao();
   else conteudo.innerHTML = renderizarChaveamento();
@@ -437,6 +679,8 @@ function renderizar() {
   if (gerarMata) gerarMata.addEventListener("click", gerarMataMataDosGrupos);
   const proxima = document.getElementById("gerarProximaRodada");
   if (proxima) proxima.addEventListener("click", gerarProximaRodada);
+  const avancarDupla = document.getElementById("avancarDupla");
+  if (avancarDupla) avancarDupla.addEventListener("click", avancarEliminacaoDupla);
   document.querySelectorAll("[data-aba]").forEach((botao) => {
     botao.classList.toggle("ativa", botao.dataset.aba === abaAtual);
   });
@@ -453,6 +697,8 @@ document.getElementById("cancelarModal").addEventListener("click", () => documen
 document.getElementById("desistenciaA").addEventListener("click", () => registrarDesistencia("A"));
 document.getElementById("desistenciaB").addEventListener("click", () => registrarDesistencia("B"));
 document.getElementById("desfazerCampeonato").addEventListener("click", desfazerCampeonato);
+document.getElementById("iniciarCampeonato").addEventListener("click", iniciarCampeonato);
+
 if (!campeonato) {
   document.getElementById("tituloCampeonato").textContent = "Campeonato não encontrado";
   document.getElementById("infoCampeonato").textContent =
@@ -460,6 +706,8 @@ if (!campeonato) {
   document.getElementById("conteudoCampeonato").innerHTML =
     '<p class="mensagem-info">Não encontramos esse campeonato neste navegador.</p>';
 } else {
+  if (!campeonato.status) campeonato.status = "rascunho";
+  if (!Array.isArray(campeonato.inscritos)) campeonato.inscritos = [];
   prepararCampeonato();
   atualizarFasesConcluidas();
   salvarDados();
