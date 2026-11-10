@@ -57,7 +57,10 @@ button, .botao { cursor: pointer; }
 .carrossel::-webkit-scrollbar-thumb { background: #444650; border-radius: 10px; }
 .cartao-campeonato { flex: 0 0 260px; min-width: 0; background: var(--painel); border: 1px solid var(--borda); border-radius: 12px; overflow: hidden; scroll-snap-align: start; transition: transform .2s, border-color .2s; }
 .cartao-campeonato:hover { transform: translateY(-5px); border-color: var(--verde); }
-.capa-cartao { height: 145px; display: flex; align-items: center; justify-content: center; font-size: 58px; background: linear-gradient(135deg, #1a5c46, #26312e); }
+.cartao-campeonato.cartao-ao-vivo { border: 2px solid #ff4d4d; box-shadow: 0 0 0 1px rgba(255, 77, 77, .18); }
+.capa-cartao { height: 145px; display: flex; align-items: center; justify-content: center; font-size: 58px; background: linear-gradient(135deg, #1a5c46, #26312e); position: relative; }
+.badge-ao-vivo { position: absolute; top: 12px; right: 12px; padding: 5px 8px; border-radius: 999px; background: rgba(255, 77, 77, .14); border: 1px solid rgba(255, 77, 77, .8); color: #ffb4b4; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.destaque-ao-vivo { border: 2px solid #ff4d4d; box-shadow: 0 0 0 1px rgba(255, 77, 77, .18); }
 .capa-cartao.esporte-futebol, .capa-cartao.esporte-futsal { background: linear-gradient(135deg, #194d29, #397a42); }
 .capa-cartao.esporte-futevolei, .capa-cartao.esporte-volei, .capa-cartao.esporte-volei-de-praia { background: linear-gradient(135deg, #704423, #bd9158); }
 .capa-cartao.esporte-basquete { background: linear-gradient(135deg, #793b1c, #db7835); }

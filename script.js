@@ -16,6 +16,35 @@ async function salvarCampeonato(campeonato) {
 function gerarId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
+function todosJogosDoCampeonato(campeonato) {
+  if (!campeonato || !Array.isArray(campeonato.fases)) return [];
+  return campeonato.fases.flatMap((fase) => {
+    if (fase && Array.isArray(fase.grupos)) {
+      return fase.grupos.flatMap((grupo) => Array.isArray(grupo.jogos) ? grupo.jogos : []);
+    }
+    return Array.isArray(fase.jogos) ? fase.jogos : [];
+  });
+}
+function jogoConcluidoNaHome(jogo) {
+  if (!jogo || jogo.folga) return true;
+  const placarA = Number(jogo.placarA);
+  const placarB = Number(jogo.placarB);
+  return jogo.placarA !== null && jogo.placarB !== null &&
+    jogo.placarA !== "" && jogo.placarB !== "" &&
+    Number.isFinite(placarA) && Number.isFinite(placarB) &&
+    placarA >= 0 && placarB >= 0;
+}
+function campeonatoAoVivo(campeonato) {
+  if (!campeonato || campeonato.inscricoesAbertas) return false;
+  const jogos = todosJogosDoCampeonato(campeonato);
+  if (!jogos.length || campeonatoConcluido(campeonato)) return false;
+  return Array.isArray(campeonato.fases) && campeonato.fases.length > 0;
+}
+function campeonatoConcluido(campeonato) {
+  const jogos = todosJogosDoCampeonato(campeonato);
+  if (!jogos.length) return false;
+  return jogos.every(jogoConcluidoNaHome);
+}
 function obterEmoji(modalidade) {
   const emojis = {
     "Futevôlei": "🏐", "Futebol": "⚽", "Futsal": "⚽",
@@ -52,13 +81,20 @@ function renderizarDestaque() {
     return;
   }
   secao.hidden = false;
+  const capaDestaque = document.getElementById("capaDestaque");
+  const aoVivo = campeonatoAoVivo(campeonato);
+  capaDestaque.className = "capa-destaque " + obterClasse(campeonato.modalidade);
+  if (aoVivo) capaDestaque.classList.add("destaque-ao-vivo");
+  const statusDestaque = document.querySelector("#destaqueCampeonato .conteudo-destaque .etiqueta");
+  if (statusDestaque) {
+    statusDestaque.textContent = aoVivo ? "AO VIVO" : "EM DESTAQUE";
+    statusDestaque.style.color = aoVivo ? "#ff5b5b" : "";
+  }
   document.getElementById("tituloDestaque").textContent = campeonato.nome;
   document.getElementById("detalhesDestaque").textContent =
     campeonato.modalidade + " • " +
     (campeonato.inscricoesAbertas ? "Inscrições abertas" : campeonato.participantes.length + " participantes") +
-    " • " + nomeFormato(campeonato.formato);
-  document.getElementById("capaDestaque").className =
-    "capa-destaque " + obterClasse(campeonato.modalidade);
+    " • " + nomeFormato(campeonato.formato) + (aoVivo ? " • Ao vivo" : "");
   document.getElementById("abrirDestaque").onclick =
     () => abrirCampeonato(campeonato.id);
 }
@@ -74,12 +110,20 @@ function renderizarListaCampeonatos() {
 
   campeonatos.forEach((campeonato) => {
     const cartao = document.createElement("article");
-    cartao.className = "cartao-campeonato";
+    const aoVivo = campeonatoAoVivo(campeonato);
+    cartao.className = "cartao-campeonato" + (aoVivo ? " cartao-ao-vivo" : "");
 
     const capa = document.createElement("div");
     capa.className = "capa-cartao " + obterClasse(campeonato.modalidade);
     capa.textContent = obterEmoji(campeonato.modalidade);
     capa.setAttribute("aria-hidden", "true");
+
+    if (aoVivo) {
+      const badge = document.createElement("span");
+      badge.className = "badge-ao-vivo";
+      badge.textContent = "Ao vivo";
+      capa.appendChild(badge);
+    }
 
     const info = document.createElement("div");
     info.className = "info-cartao";
