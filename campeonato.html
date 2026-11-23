@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
   <script src="supabase-client.js" defer></script>
+  <script src="interclasse-api.js" defer></script>
   <script src="campeonato.js" defer></script>
 </head>
 <body>
@@ -44,6 +45,22 @@
           <button class="botao-desfazer" id="desfazerCampeonato">Reiniciar campeonato</button>
         </div>
       </div>
+      <section id="integracaoInterclasse" class="integracao-api" aria-labelledby="tituloIntegracao">
+        <div>
+          <h3 id="tituloIntegracao">API centralizada Interclasse</h3>
+          <p>O token fica somente nesta sessão do navegador. Solicite ao professor a autorização da origem exata deste site.</p>
+        </div>
+        <label for="tokenInterclasse">Token individual do grupo
+          <input id="tokenInterclasse" type="password" autocomplete="off" spellcheck="false">
+        </label>
+        <div class="acoes-integracao">
+          <button type="button" class="botao-pequeno" id="conectarInterclasse">Conectar</button>
+          <button type="button" class="aba" id="limparTokenInterclasse">Limpar token</button>
+          <button type="button" class="aba" id="sincronizarInterclasse">Sincronizar partidas</button>
+        </div>
+        <p id="statusInterclasse" role="status" aria-live="polite">Token não configurado.</p>
+        <p id="ultimaSincronizacaoInterclasse"></p>
+      </section>
       <div class="abas">
         <button class="aba ativa" data-aba="jogos">Jogos</button>
         <button class="aba" data-aba="classificacao">Classificação</button>
@@ -62,6 +79,10 @@
         <button type="button" class="fechar-modal" id="fecharModal" aria-label="Fechar">×</button>
       </div>
       <p id="confrontoModal" class="confronto-modal"></p>
+      <div class="recuperacao-api">
+        <p id="statusApiJogo" role="status" aria-live="polite"></p>
+        <button type="button" class="aba" id="recuperarPlacarApi" hidden>Consultar/recuperar da API</button>
+      </div>
       <div class="campos-placar-modal">
         <label><span id="equipeAModal"></span><input id="placarAModal" type="number" min="0" step="1"></label>
         <span>×</span>
