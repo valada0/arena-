@@ -1,94 +1,73 @@
 (() => {
-  const API_BASE_URL = "https://rvarjao.pythonanywhere.com/api";
-  let token = "e_ztb5x_ES6zRIdk1eUBg35QBTatR0pJqKZJeR6s8dY";
+  const FUNCTION_NAME = "interclasse-proxy";
 
-  class ApiError extends Error {
-    constructor(status, message) {
-      super(message);
-      this.name = "InterclasseApiError";
-      this.status = status;
-    }
+  function statusDaFalha(error) {
+    return error && error.context && Number.isInteger(error.context.status)
+      ? error.context.status
+      : undefined;
   }
 
-  function mensagemHttp(status, detalhe) {
-    const mensagens = {
-      400: "A API rejeitou os dados. Confira equipes, modalidade e pontuação.",
-      401: "Token inválido ou ausente. Confira o token com o professor.",
-      403: "A origem não está autorizada ou este placar pertence a outro grupo.",
-      404: "Placar não encontrado. Confira o ID salvo.",
-      503: "A API está temporariamente indisponível. Tente novamente mais tarde."
-    };
-    return (mensagens[status] || `A API respondeu com HTTP ${status}.`) +
-      (detalhe ? ` ${detalhe}` : "");
-  }
-
-  async function requisitar(caminho, metodo = "GET", corpo) {
-    if (!token) throw new Error("Informe o token individual do grupo.");
-    const headers = { Authorization: `Bearer ${token}` };
-    const opcoes = { method: metodo, headers, credentials: "omit" };
-    if (corpo !== undefined) {
-      headers["Content-Type"] = "application/json";
-      opcoes.body = JSON.stringify(corpo);
-    }
-
-    let resposta;
-    try {
-      resposta = await fetch(`${API_BASE_URL}${caminho}`, opcoes);
-    } catch (error) {
-      const falha = new Error("Falha de rede ou CORS. Confira a conexão e se a origem foi autorizada pelo professor.");
-      falha.causa = error;
-      throw falha;
-    }
-
-    const texto = await resposta.text();
-    let dados = null;
-    if (texto) {
+  async function falhaDaFuncao(error) {
+    const status = statusDaFalha(error);
+    let detalhe = "";
+    if (error && error.context && typeof error.context.clone === "function") {
       try {
-        dados = JSON.parse(texto);
+        const body = await error.context.clone().json();
+        detalhe = body && (body.error || body.erro || body.message)
+          ? body.error || body.erro || body.message
+          : "";
       } catch {
-        dados = null;
+        detalhe = "";
       }
     }
-    if (!resposta.ok) {
-      const detalhe = dados && (dados.message || dados.erro || dados.error);
-      throw new ApiError(resposta.status, mensagemHttp(resposta.status, detalhe));
-    }
-    if (!dados || typeof dados !== "object") {
-      throw new Error("A API respondeu sem os dados esperados.");
-    }
-    return dados;
+    const mensagens = {
+      400: "A função rejeitou os dados enviados.",
+      401: "Sessão Supabase inválida ou expirada. Entre novamente.",
+      403: "A origem não está autorizada ou esta conta não é dona do campeonato/placar.",
+      404: "Campeonato, partida ou placar não encontrado.",
+      409: "A partida já tem uma tentativa reservada ou precisa de verificação.",
+      503: "Falha temporária ao acessar a API. Verifique a rede e tente novamente."
+    };
+    const mensagem = status
+      ? mensagens[status] || `A função respondeu com HTTP ${status}.`
+      : "Falha de rede ou CORS ao acessar a função segura do Interclasse.";
+    const falha = new Error(detalhe || mensagem);
+    falha.status = status;
+    throw falha;
   }
 
-  function idSeguro(id) {
-    const valor = String(id);
-    if (!/^[a-zA-Z0-9_-]+$/.test(valor)) throw new Error("ID de placar inválido.");
-    return encodeURIComponent(valor);
+  async function invocar(acao, dados) {
+    const cliente = window.arenaStore.client;
+    const { data, error } = await cliente.functions.invoke(FUNCTION_NAME, {
+      body: { acao, ...dados }
+    });
+    if (error) {
+      await falhaDaFuncao(error);
+    }
+    if (!data || typeof data !== "object") {
+      throw new Error("A função do Interclasse respondeu sem os dados esperados.");
+    }
+    return data;
   }
 
   window.interclasseApi = {
-    setToken(valor) {
-      token = String(valor || "").trim();
-      return Boolean(token);
+    check(championshipId) {
+      return invocar("check", { championshipId });
     },
-    clearToken() {
-      token = "";
+    create(championshipId, gameId, confirmarAusencia = false) {
+      return invocar("create", { championshipId, gameId, confirmarAusencia });
     },
-    hasToken() {
-      return Boolean(token);
+    get(championshipId, gameId, scoreId) {
+      return invocar("get", { championshipId, gameId, scoreId });
     },
-    create(payload) {
-      return requisitar("/placares/criar", "POST", payload);
+    listCandidates(championshipId, gameId) {
+      return invocar("listCandidates", { championshipId, gameId });
     },
-    get(id) {
-      return requisitar(`/placares/${idSeguro(id)}`);
+    associate(championshipId, gameId, scoreId) {
+      return invocar("associate", { championshipId, gameId, scoreId });
     },
-    list() {
-      return requisitar("/placares");
-    },
-    patch(id, campos) {
-      return requisitar(`/placares/${idSeguro(id)}`, "PATCH", campos);
+    patch(championshipId, gameId, scoreId, fields) {
+      return invocar("patch", { championshipId, gameId, scoreId, fields });
     }
   };
-
-  window.addEventListener("pagehide", () => { token = ""; });
 })();

@@ -97,7 +97,7 @@ function camposPendentesInterclasse(jogo) {
   return campos;
 }
 function erroCriacaoAmbigua(error) {
-  return !Number.isInteger(error && error.status) || error.status >= 500;
+  return !Number.isInteger(error && error.status) || error.status >= 500 || error.status === 409;
 }
 async function criarPlacarInterclasse(jogo) {
   if (jogo.interclasseId || jogo.interclasseCriacaoPendente) return;
@@ -113,10 +113,15 @@ async function criarPlacarInterclasse(jogo) {
   }
   let criado;
   try {
-    criado = await window.interclasseApi.create(payload);
+    criado = await window.interclasseApi.create(
+      String(campeonato.id),
+      String(jogo.id),
+      jogo.interclasseRetryConfirmada === true
+    );
   } catch (error) {
     jogo.interclasseCriacaoAmbigua = erroCriacaoAmbigua(error);
     if (!jogo.interclasseCriacaoAmbigua) jogo.interclasseCriacaoPendente = false;
+    delete jogo.interclasseRetryConfirmada;
     await salvarDados();
     throw error;
   }
@@ -128,6 +133,7 @@ async function criarPlacarInterclasse(jogo) {
   jogo.interclasseId = String(criado.id);
   jogo.interclasseCriacaoPendente = false;
   jogo.interclasseCriacaoAmbigua = false;
+  delete jogo.interclasseRetryConfirmada;
   lerEstadoApiInterclasse(jogo, criado);
   if (!await salvarDados()) {
     jogo.interclasseCriacaoPendente = true;
@@ -137,10 +143,6 @@ async function criarPlacarInterclasse(jogo) {
 }
 async function sincronizarJogoInterclasseAgora(jogo) {
   if (!jogo.interclasseId && !jogoElegivelParaInterclasse(jogo)) return;
-  if (!window.interclasseApi.hasToken()) {
-    atualizarStatusInterclasse("Informe o token para sincronizar. As alterações locais foram mantidas.", "erro");
-    return;
-  }
   if (jogo.interclasseCriacaoPendente && !jogo.interclasseId) {
     atualizarStatusInterclasse(
       "Há uma criação sem confirmação. Verifique o resultado na API/monitor antes de solicitar nova tentativa.",
@@ -160,11 +162,15 @@ async function sincronizarJogoInterclasseAgora(jogo) {
   if (!jogo.interclasseId) await criarPlacarInterclasse(jogo);
   let remoto = estadoApiInterclasse.get(String(jogo.id));
   if (!remoto) {
-    remoto = lerEstadoApiInterclasse(jogo, await window.interclasseApi.get(jogo.interclasseId));
+    remoto = lerEstadoApiInterclasse(jogo, await window.interclasseApi.get(
+      String(campeonato.id), String(jogo.id), jogo.interclasseId
+    ));
   }
   const campos = camposPendentesInterclasse(jogo);
   if (Object.keys(campos).length) {
-    const resposta = await window.interclasseApi.patch(jogo.interclasseId, campos);
+    const resposta = await window.interclasseApi.patch(
+      String(campeonato.id), String(jogo.id), jogo.interclasseId, campos
+    );
     lerEstadoApiInterclasse(jogo, { ...remoto, ...campos, ...resposta });
   }
   ultimaSincronizacaoInterclasse = new Date();
@@ -201,15 +207,13 @@ async function sincronizarJogosInterclasse() {
       jogo.interclasseCriacaoPendente && !jogo.interclasseId
     );
     if (pendentes.length) {
-      if (!window.interclasseApi.hasToken()) {
-        atualizarStatusInterclasse("Informe o token antes de verificar tentativas pendentes.", "erro");
-        return;
-      }
       atualizarStatusInterclasse("Verificando criações pendentes na listagem da API...");
-      const placares = listaPlacaresInterclasse(await window.interclasseApi.list());
-      if (!placares) throw new Error("A API não retornou a lista de placares em formato reconhecido.");
       for (const jogo of pendentes) {
         const payload = dadosApiInterclasse(jogo);
+        const placares = listaPlacaresInterclasse(await window.interclasseApi.listCandidates(
+          String(campeonato.id), String(jogo.id)
+        ));
+        if (!placares) throw new Error("A API não retornou uma lista reconhecida.");
         const candidatos = placares.filter((placar) =>
           placar && String(placar.nome_equipe_a || "").trim() === payload.nome_equipe_a &&
           String(placar.nome_equipe_b || "").trim() === payload.nome_equipe_b &&
@@ -223,10 +227,14 @@ async function sincronizarJogosInterclasse() {
             `A lista contém um placar compatível: ID ${candidato.id}, grupo ${grupo}. ` +
             "A lista é compartilhada. Só associe se confirmou que este ID pertence ao seu grupo. Associar?"
           )) continue;
+          const associado = await window.interclasseApi.associate(
+            String(campeonato.id), String(jogo.id), candidato.id
+          );
           jogo.interclasseId = String(candidato.id);
           jogo.interclasseCriacaoPendente = false;
           jogo.interclasseCriacaoAmbigua = false;
-          lerEstadoApiInterclasse(jogo, candidato);
+          delete jogo.interclasseRetryConfirmada;
+          lerEstadoApiInterclasse(jogo, associado);
           if (!await salvarDados()) {
             jogo.interclasseCriacaoPendente = true;
             jogo.interclasseCriacaoAmbigua = true;
@@ -246,6 +254,7 @@ async function sincronizarJogosInterclasse() {
           if (!conferir) continue;
           jogo.interclasseCriacaoPendente = false;
           jogo.interclasseCriacaoAmbigua = false;
+          jogo.interclasseRetryConfirmada = true;
           if (!await salvarDados()) {
             jogo.interclasseCriacaoPendente = true;
             jogo.interclasseCriacaoAmbigua = true;
@@ -273,25 +282,13 @@ function sincronizarElegiveisInterclasse() {
   void Promise.all(jogos.map(sincronizarJogoInterclasse));
 }
 async function conectarInterclasse() {
-  const campo = document.getElementById("tokenInterclasse");
-  const token = campo.value;
-  if (!window.interclasseApi.setToken(token)) {
-    atualizarStatusInterclasse("Informe o token individual do grupo.", "erro");
-    return;
-  }
-  campo.value = "";
   atualizarStatusInterclasse("Validando token e origem...");
   try {
-    await window.interclasseApi.list();
+    await window.interclasseApi.check(String(campeonato.id));
     atualizarStatusInterclasse("Conexão confirmada. Partidas locais permanecem salvas.", "ok");
   } catch (error) {
     atualizarStatusInterclasse(mensagemErroInterclasse(error), "erro");
   }
-}
-function limparTokenInterclasse() {
-  window.interclasseApi.clearToken();
-  document.getElementById("tokenInterclasse").value = "";
-  atualizarStatusInterclasse("Token removido da memória desta página.");
 }
 async function recuperarPlacarInterclasse() {
   if (!jogoModalAtual || !jogoModalAtual.interclasseId || !exigirOrganizador()) return;
@@ -300,7 +297,9 @@ async function recuperarPlacarInterclasse() {
   botao.disabled = true;
   status.textContent = "Consultando o mesmo ID na API...";
   try {
-    const dados = await window.interclasseApi.get(jogoModalAtual.interclasseId);
+    const dados = await window.interclasseApi.get(
+      String(campeonato.id), String(jogoModalAtual.id), jogoModalAtual.interclasseId
+    );
     if (!Number.isInteger(dados.pontos_a) || dados.pontos_a < 0 ||
         !Number.isInteger(dados.pontos_b) || dados.pontos_b < 0 ||
         !["aguardando", "em_andamento", "encerrado"].includes(dados.status)) {
@@ -1516,15 +1515,9 @@ document.getElementById("formCampeonatoEdicao").addEventListener("submit", salva
 document.getElementById("fecharEdicao").addEventListener("click", () => document.getElementById("modalCampeonato").close());
 document.getElementById("cancelarEdicao").addEventListener("click", () => document.getElementById("modalCampeonato").close());
 document.getElementById("conectarInterclasse").addEventListener("click", () => void conectarInterclasse());
-document.getElementById("limparTokenInterclasse").addEventListener("click", limparTokenInterclasse);
 document.getElementById("sincronizarInterclasse").addEventListener("click", sincronizarJogosInterclasse);
 document.getElementById("recuperarPlacarApi").addEventListener("click", () => void recuperarPlacarInterclasse());
-window.addEventListener("pagehide", () => {
-  const campoToken = document.getElementById("tokenInterclasse");
-  if (campoToken) campoToken.value = "";
-});
 async function carregarCampeonatoDaConta({ user, championships: dados, error }) {
-  if (!user && window.interclasseApi.hasToken()) limparTokenInterclasse();
   campeonatos = !error ? dados : [];
   campeonato = campeonatos.find((item) => String(item.id) === String(idCampeonato)) || null;
   if (!campeonato) {

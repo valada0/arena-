@@ -1,0 +1,2 @@
+[functions.interclasse-proxy]
+verify_jwt = true

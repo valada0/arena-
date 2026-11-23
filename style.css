@@ -210,8 +210,6 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
 .integracao-api { display: grid; gap: 12px; margin: 20px 0; padding: 18px; background: var(--painel); border: 1px solid var(--borda); border-radius: 10px; }
 .integracao-api h3 { margin-bottom: 4px; }
 .integracao-api p { color: var(--secundario); font-size: 13px; }
-.integracao-api label { display: grid; gap: 6px; color: var(--secundario); font-size: 13px; }
-.integracao-api input { width: 100%; max-width: 520px; min-height: 42px; padding: 10px; color: var(--texto); background: #111217; border: 1px solid #41434d; border-radius: 7px; }
 .acoes-integracao { display: flex; flex-wrap: wrap; gap: 8px; }
 .integracao-api [data-estado="erro"] { color: #ffb4b9; }
 .integracao-api [data-estado="ok"] { color: var(--verde); }

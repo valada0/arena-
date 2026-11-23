@@ -48,17 +48,13 @@
       <section id="integracaoInterclasse" class="integracao-api" aria-labelledby="tituloIntegracao">
         <div>
           <h3 id="tituloIntegracao">API centralizada Interclasse</h3>
-          <p>O token fica somente nesta sessão do navegador. Solicite ao professor a autorização da origem exata deste site.</p>
+          <p>O token fica como segredo da função no Supabase, nunca no navegador. A origem exata deste site deve estar configurada na função.</p>
         </div>
-        <label for="tokenInterclasse">Token individual do grupo
-          <input id="tokenInterclasse" type="password" autocomplete="off" spellcheck="false">
-        </label>
         <div class="acoes-integracao">
-          <button type="button" class="botao-pequeno" id="conectarInterclasse">Conectar</button>
-          <button type="button" class="aba" id="limparTokenInterclasse">Limpar token</button>
+          <button type="button" class="botao-pequeno" id="conectarInterclasse">Verificar conexão</button>
           <button type="button" class="aba" id="sincronizarInterclasse">Sincronizar partidas</button>
         </div>
-        <p id="statusInterclasse" role="status" aria-live="polite">Token não configurado.</p>
+        <p id="statusInterclasse" role="status" aria-live="polite">Aguardando verificação da função segura.</p>
         <p id="ultimaSincronizacaoInterclasse"></p>
       </section>
       <div class="abas">
