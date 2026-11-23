@@ -1,6 +1,6 @@
 (() => {
   const API_BASE_URL = "https://rvarjao.pythonanywhere.com/api";
-  let token = "";
+  let token = "e_ztb5x_ES6zRIdk1eUBg35QBTatR0pJqKZJeR6s8dY";
 
   class ApiError extends Error {
     constructor(status, message) {
