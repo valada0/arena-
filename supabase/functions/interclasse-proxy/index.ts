@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const API_BASE_URL = "https://rvarjao.pythonanywhere.com/api";
 const LINK_TABLE = "interclasse_match_links";
+const DEFAULT_APP_ORIGIN = "https://valada0.github.io";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -116,11 +117,8 @@ function safeErrorMessage(error: unknown): string {
 }
 
 Deno.serve(async (request: Request) => {
-  const configuredOrigin = Deno.env.get("APP_ORIGIN");
+  const configuredOrigin = Deno.env.get("APP_ORIGIN") || DEFAULT_APP_ORIGIN;
   const requestOrigin = request.headers.get("Origin") || "";
-  if (!configuredOrigin) {
-    return new Response("APP_ORIGIN is not configured.", { status: 500 });
-  }
   if (requestOrigin !== configuredOrigin) {
     return new Response("Origin not allowed.", { status: 403 });
   }
