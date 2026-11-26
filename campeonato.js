@@ -2,6 +2,7 @@ const parametros = new URLSearchParams(window.location.search);
 const idCampeonato = parametros.get("id");
 const modoTestePlacar = parametros.get("testePlacar") === "1";
 const chaveTestePlacar = `arena-teste-placar-${idCampeonato}`;
+const chaveCodigoTesteApi = `arena-codigo-api-${idCampeonato}`;
 let campeonatos = [];
 let campeonato = null;
 let abaAtual = "jogos";
@@ -55,7 +56,7 @@ function atualizarStatusInterclasse(mensagem, estado = "") {
   status.dataset.estado = estado;
   const ultima = document.getElementById("ultimaSincronizacaoInterclasse");
   if (ultima && ultimaSincronizacaoInterclasse) {
-    ultima.textContent = (modoTestePlacar ? "Última consulta confirmada: " : "Última sincronização confirmada: ") +
+    ultima.textContent = (modoTestePlacar ? "Última operação confirmada: " : "Última sincronização confirmada: ") +
       ultimaSincronizacaoInterclasse.toLocaleString("pt-BR");
   }
 }
@@ -118,6 +119,16 @@ function camposPendentesInterclasse(jogo) {
 function erroCriacaoAmbigua(error) {
   return !Number.isInteger(error && error.status) || error.status >= 500 || error.status === 409;
 }
+function obterCodigoTesteApi() {
+  let codigo = sessionStorage.getItem(chaveCodigoTesteApi);
+  if (!codigo) {
+    codigo = prompt("Informe o código temporário para enviar o placar à API Interclasse:");
+    if (!codigo) throw new Error("O envio à API foi cancelado: informe o código temporário.");
+    codigo = codigo.trim();
+    sessionStorage.setItem(chaveCodigoTesteApi, codigo);
+  }
+  return codigo;
+}
 async function criarPlacarInterclasse(jogo) {
   if (jogo.interclasseId || jogo.interclasseCriacaoPendente) return;
   const payload = dadosApiInterclasse(jogo);
@@ -162,6 +173,25 @@ async function criarPlacarInterclasse(jogo) {
 }
 async function sincronizarJogoInterclasseAgora(jogo) {
   if (!jogo.interclasseId && !jogoElegivelParaInterclasse(jogo)) return;
+  if (modoTestePlacar) {
+    try {
+      const resposta = await window.interclasseApi.testSync(
+        String(campeonato.id), jogo, obterCodigoTesteApi()
+      );
+      jogo.interclasseId = String(resposta.id);
+      jogo.interclasseCriacaoPendente = false;
+      jogo.interclasseCriacaoAmbigua = false;
+      delete jogo.interclasseRetryConfirmada;
+      lerEstadoApiInterclasse(jogo, resposta);
+      await salvarDados();
+      ultimaSincronizacaoInterclasse = new Date();
+      atualizarStatusInterclasse("Placar de teste enviado à API Interclasse.", "ok");
+    } catch (error) {
+      if (error.status === 403) sessionStorage.removeItem(chaveCodigoTesteApi);
+      throw error;
+    }
+    return;
+  }
   if (jogo.interclasseCriacaoPendente && !jogo.interclasseId) {
     atualizarStatusInterclasse(
       "Há uma criação sem confirmação. Verifique o resultado na API/monitor antes de solicitar nova tentativa.",
@@ -207,6 +237,13 @@ function sincronizarJogoInterclasse(jogo) {
   });
   return atual;
 }
+function sincronizarAposSalvar(jogo) {
+  if (modoTestePlacar) {
+    if (jogo) void sincronizarJogoInterclasse(jogo);
+  } else {
+    sincronizarElegiveisInterclasse();
+  }
+}
 function listaPlacaresInterclasse(resposta) {
   if (Array.isArray(resposta)) return resposta;
   if (resposta && Array.isArray(resposta.placares)) return resposta.placares;
@@ -223,8 +260,8 @@ async function sincronizarJogosInterclasse() {
       const vinculados = todosJogosCampeonato().filter((jogo) => jogo.interclasseId);
       let diferentes = 0;
       for (const jogo of vinculados) {
-        const remoto = await window.interclasseApi.peek(
-          String(campeonato.id), String(jogo.id), String(jogo.interclasseId)
+        const remoto = await window.interclasseApi.testGet(
+          String(campeonato.id), jogo, obterCodigoTesteApi()
         );
         lerEstadoApiInterclasse(jogo, remoto);
         if (Object.keys(camposPendentesInterclasse(jogo)).length) diferentes++;
@@ -234,6 +271,7 @@ async function sincronizarJogosInterclasse() {
         "ok"
       );
     } catch (error) {
+      if (error.status === 403) sessionStorage.removeItem(chaveCodigoTesteApi);
       atualizarStatusInterclasse(mensagemErroInterclasse(error), "erro");
     } finally {
       botaoTeste.disabled = false;
@@ -344,9 +382,9 @@ async function recuperarPlacarInterclasse() {
   botao.disabled = true;
   status.textContent = "Consultando o mesmo ID na API...";
   try {
-    const dados = await window.interclasseApi[modoTestePlacar ? "peek" : "get"](
-      String(campeonato.id), String(jogoModalAtual.id), jogoModalAtual.interclasseId
-    );
+    const dados = modoTestePlacar
+      ? await window.interclasseApi.testGet(String(campeonato.id), jogoModalAtual, obterCodigoTesteApi())
+      : await window.interclasseApi.get(String(campeonato.id), String(jogoModalAtual.id), jogoModalAtual.interclasseId);
     if (!Number.isInteger(dados.pontos_a) || dados.pontos_a < 0 ||
         !Number.isInteger(dados.pontos_b) || dados.pontos_b < 0 ||
         !["aguardando", "em_andamento", "encerrado"].includes(dados.status)) {
@@ -376,6 +414,7 @@ async function recuperarPlacarInterclasse() {
     atualizarStatusInterclasse("Consulta da partida confirmada.", "ok");
     renderizar();
   } catch (error) {
+    if (modoTestePlacar && error.status === 403) sessionStorage.removeItem(chaveCodigoTesteApi);
     status.textContent = mensagemErroInterclasse(error);
     atualizarStatusInterclasse(mensagemErroInterclasse(error), "erro");
   } finally {
@@ -1356,7 +1395,7 @@ function salvarPlacar(idJogo) {
   atualizarFasesConcluidas();
   avancarFasesAutomaticamente();
   void salvarDados().then((salvo) => {
-    if (salvo && !modoTestePlacar) sincronizarElegiveisInterclasse();
+    if (salvo) sincronizarAposSalvar(jogo);
   });
   renderizar();
 }
@@ -1417,8 +1456,9 @@ function salvarPlacarModal(evento) {
     atualizarFasesConcluidas();
     avancarFasesAutomaticamente();
   }
+  const jogoSalvo = placarPreenchido ? jogoModalAtual : null;
   void salvarDados().then((salvo) => {
-    if (salvo && !modoTestePlacar) sincronizarElegiveisInterclasse();
+    if (salvo) sincronizarAposSalvar(jogoSalvo);
   });
   document.getElementById("modalPlacar").close();
   jogoModalAtual = null;
@@ -1434,8 +1474,9 @@ function registrarDesistencia(lado) {
   liberarQuadraJogo(jogoModalAtual);
   atualizarFasesConcluidas();
   avancarFasesAutomaticamente();
+  const jogoSalvo = jogoModalAtual;
   void salvarDados().then((salvo) => {
-    if (salvo && !modoTestePlacar) sincronizarElegiveisInterclasse();
+    if (salvo) sincronizarAposSalvar(jogoSalvo);
   });
   document.getElementById("modalPlacar").close();
   jogoModalAtual = null;

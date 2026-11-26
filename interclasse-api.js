@@ -71,6 +71,26 @@
     },
     patch(championshipId, gameId, scoreId, fields) {
       return invocar("patch", { championshipId, gameId, scoreId, fields });
+    },
+    testSync(championshipId, game, testCode) {
+      return invocar("testSync", {
+        championshipId,
+        gameId: game.id,
+        nomeEquipeA: game.equipeA,
+        nomeEquipeB: game.equipeB,
+        pontos_a: game.placarA,
+        pontos_b: game.placarB,
+        testCode
+      });
+    },
+    testGet(championshipId, game, testCode) {
+      return invocar("testGet", {
+        championshipId,
+        gameId: game.id,
+        nomeEquipeA: game.equipeA,
+        nomeEquipeB: game.equipeB,
+        testCode
+      });
     }
   };
 })();
