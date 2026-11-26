@@ -1,5 +1,7 @@
 const parametros = new URLSearchParams(window.location.search);
 const idCampeonato = parametros.get("id");
+const modoTestePlacar = parametros.get("testePlacar") === "1";
+const chaveTestePlacar = `arena-teste-placar-${idCampeonato}`;
 let campeonatos = [];
 let campeonato = null;
 let abaAtual = "jogos";
@@ -22,8 +24,25 @@ function exigirOrganizador() {
   if (!window.arenaStore.user) window.arenaStore.openAuth();
   return false;
 }
+function podeEditarPlacar() {
+  return modoTestePlacar || ehOrganizador();
+}
+function exigirEditorPlacar() {
+  if (modoTestePlacar) return true;
+  return exigirOrganizador();
+}
 function salvarDados() {
-  if (!campeonato || !exigirOrganizador()) return Promise.resolve(false);
+  if (!campeonato) return Promise.resolve(false);
+  if (modoTestePlacar) {
+    try {
+      sessionStorage.setItem(chaveTestePlacar, JSON.stringify(campeonato));
+      return Promise.resolve(true);
+    } catch (error) {
+      window.arenaStore.showError(error);
+      return Promise.resolve(false);
+    }
+  }
+  if (!exigirOrganizador()) return Promise.resolve(false);
   return window.arenaStore.save(campeonato).then(() => true).catch((error) => {
     window.arenaStore.showError(error);
     return false;
@@ -271,6 +290,7 @@ async function sincronizarJogosInterclasse() {
   }
 }
 function sincronizarElegiveisInterclasse() {
+  if (modoTestePlacar) return;
   const jogos = todosJogosCampeonato().filter((jogo) =>
     jogoElegivelParaInterclasse(jogo) || jogo.interclasseId
   );
@@ -953,7 +973,7 @@ function renderizarJogos(jogos) {
   return `<div class="lista-jogos">${jogos.map((jogo) => {
     const concluido = jogoConcluido(jogo);
     const pronto = jogoPronto(jogo);
-    const editavel = pronto && ehOrganizador();
+    const editavel = pronto && podeEditarPlacar();
     const equipeA = jogo.equipeA || "Aguardando classificado";
     const equipeB = jogo.equipeB || (jogo.folga ? "Folga" : "Aguardando classificado");
     return `<article class="bloco-jogo ${classeStatusQuadra(jogo)}">
@@ -977,7 +997,7 @@ function renderizarJogosChave(jogos) {
   return `<div class="lista-jogos lista-jogos-chave">${jogos.map((jogo) => {
     const concluido = jogoConcluido(jogo);
     const pronto = jogoPronto(jogo);
-    const editavel = pronto && ehOrganizador();
+    const editavel = pronto && podeEditarPlacar();
     const placar = concluido ? `${jogo.placarA} : ${jogo.placarB}` : editavel ? "Definir placar" : "Aguardando";
     return `<article class="bloco-jogo bloco-jogo-chave ${classeStatusQuadra(jogo)} ${editavel ? "editavel" : ""}" ${editavel ? `data-editar-jogo="${jogo.id}" tabindex="0" role="button" aria-label="Editar placar de ${escapar(jogo.equipeA)} contra ${escapar(jogo.equipeB)}"` : ""}>
       <span class="nome-equipe">${escapar(jogo.equipeA || "Aguardando classificado")}</span>
@@ -1055,13 +1075,13 @@ function renderizarChaveamento() {
   const fasesChave = [...fasesMata, ...campeonato.fases.filter((fase) => fase.tipo === "terceiro")];
   const faseGrupos = campeonato.fases.find((fase) => fase.tipo === "grupos");
   let html = "";
-  if (faseGrupos && !fasesMata.length) html += `<section class="bloco-fase"><h3>Classificar para o mata-mata</h3><p class="mensagem-info">Quando os grupos terminarem, os dois primeiros de cada grupo avançam ao chaveamento.</p>${ehOrganizador() ? '<button class="botao" id="gerarMata">Gerar chaveamento</button>' : ""}</section>`;
+  if (faseGrupos && !fasesMata.length) html += `<section class="bloco-fase"><h3>Classificar para o mata-mata</h3><p class="mensagem-info">Quando os grupos terminarem, os dois primeiros de cada grupo avançam ao chaveamento.</p>${podeEditarPlacar() ? '<button class="botao" id="gerarMata">Gerar chaveamento</button>' : ""}</section>`;
   if (fasesChave.length) {
     html += `<section class="bloco-chaveamento"><h3>Chaveamento eliminatório</h3><div class="chaveamento">${fasesChave.map((fase, indice) => `<div class="coluna-chave ${fase.tipo === "terceiro" ? "coluna-terceiro" : ""}"><h4>${escapar(fase.nome === "Mata-mata" ? nomeRodada(indice) : fase.nome)}</h4><div class="jogos-chave">${fase.jogos.map((jogo) => {
       const vencedor = vencedorDoJogo(jogo);
       const pronto = jogoPronto(jogo);
-      const editavel = pronto && ehOrganizador();
-      return `<article class="partida-chave ${classeStatusQuadra(jogo)} ${editavel ? "editavel" : ""}" ${editavel ? `data-editar-jogo="${jogo.id}" tabindex="0" role="button" aria-label="Editar placar de ${escapar(jogo.equipeA)} contra ${escapar(jogo.equipeB)}"` : ""}><div class="equipe-chave ${vencedor === jogo.equipeA ? "vencedora" : ""}"><span>${escapar(jogo.equipeA || "Aguardando classificado")}</span><strong>${jogo.folga ? "-" : jogoConcluido(jogo) ? jogo.placarA : "-"}</strong></div><div class="equipe-chave ${vencedor === jogo.equipeB ? "vencedora" : ""}"><span>${jogo.equipeB ? escapar(jogo.equipeB) : jogo.folga ? "Folga" : "Aguardando classificado"}</span><strong>${jogo.folga ? "" : jogoConcluido(jogo) ? jogo.placarB : "-"}</strong></div>${indicadorQuadraJogo(jogo)}<small>${jogo.folga ? "Avanço automático" : !pronto ? "Aguardando os vencedores da rodada anterior" : !ehOrganizador() ? jogoConcluido(jogo) ? "Resultado" : "Aguardando placar do organizador" : jogo.desistente ? "Vitória por desistência" : jogoConcluido(jogo) ? "Clique para editar" : "Clique para registrar o placar"}</small></article>`;
+      const editavel = pronto && podeEditarPlacar();
+      return `<article class="partida-chave ${classeStatusQuadra(jogo)} ${editavel ? "editavel" : ""}" ${editavel ? `data-editar-jogo="${jogo.id}" tabindex="0" role="button" aria-label="Editar placar de ${escapar(jogo.equipeA)} contra ${escapar(jogo.equipeB)}"` : ""}><div class="equipe-chave ${vencedor === jogo.equipeA ? "vencedora" : ""}"><span>${escapar(jogo.equipeA || "Aguardando classificado")}</span><strong>${jogo.folga ? "-" : jogoConcluido(jogo) ? jogo.placarA : "-"}</strong></div><div class="equipe-chave ${vencedor === jogo.equipeB ? "vencedora" : ""}"><span>${jogo.equipeB ? escapar(jogo.equipeB) : jogo.folga ? "Folga" : "Aguardando classificado"}</span><strong>${jogo.folga ? "" : jogoConcluido(jogo) ? jogo.placarB : "-"}</strong></div>${indicadorQuadraJogo(jogo)}<small>${jogo.folga ? "Avanço automático" : !pronto ? "Aguardando os vencedores da rodada anterior" : !podeEditarPlacar() ? jogoConcluido(jogo) ? "Resultado" : "Aguardando placar do organizador" : jogo.desistente ? "Vitória por desistência" : jogoConcluido(jogo) ? "Clique para editar" : "Clique para registrar o placar"}</small></article>`;
     }).join("")}</div></div>`).join("")}</div></section>`;
     const ultima = fasesMata[fasesMata.length - 1];
     if (ultima.concluida) {
@@ -1103,12 +1123,12 @@ function renderizarChaveamentoDuplo() {
     html += renderizarPodio(campeao, viceCampeao, terceiroLugar);
   } else {
     const textoBotao = final && final.concluida ? "Gerar jogo decisivo" : "Avançar chaveamento";
-    html += `<section class="bloco-fase"><h3>Próximo avanço</h3>${ehOrganizador() ? `<button class="botao" id="avancarDupla">${textoBotao}</button>` : '<p class="mensagem-info">O organizador controla o avanço do chaveamento.</p>'}</section>`;
+    html += `<section class="bloco-fase"><h3>Próximo avanço</h3>${podeEditarPlacar() ? `<button class="botao" id="avancarDupla">${textoBotao}</button>` : '<p class="mensagem-info">O organizador controla o avanço do chaveamento.</p>'}</section>`;
   }
   return html;
 }
 function gerarMataMataDosGrupos() {
-  if (!exigirOrganizador()) return;
+  if (!exigirEditorPlacar()) return;
   const fase = campeonato.fases.find((f) => f.tipo === "grupos");
   if (!fase || !fase.concluida) {
     alert("Registre todos os resultados da fase de grupos primeiro.");
@@ -1131,7 +1151,7 @@ function gerarMataMataDosGrupos() {
   salvarDados(); renderizar();
 }
 function gerarProximaRodada() {
-  if (!exigirOrganizador()) return;
+  if (!exigirEditorPlacar()) return;
   const fase = [...campeonato.fases].reverse().find((f) => f.tipo === "mata");
   if (!fase || !fase.concluida) {
     alert("Registre todos os resultados desta rodada antes de avançar.");
@@ -1207,7 +1227,7 @@ function fasesDupla(tipo) {
   return campeonato.fases.filter((fase) => fase.tipo === tipo);
 }
 function avancarEliminacaoDupla() {
-  if (!exigirOrganizador()) return;
+  if (!exigirEditorPlacar()) return;
   const superiores = fasesDupla("dupla-superior");
   const inferiores = fasesDupla("dupla-inferior");
   const finais = fasesDupla("dupla-final");
@@ -1284,7 +1304,7 @@ function avancarEliminacaoDupla() {
   renderizar();
 }
 function salvarPlacar(idJogo) {
-  if (!exigirOrganizador()) return;
+  if (!exigirEditorPlacar()) return;
   const inputs = [...document.querySelectorAll(`[data-jogo="${idJogo}"]`)];
   const inputA = inputs.find((i) => i.dataset.lado === "A");
   const inputB = inputs.find((i) => i.dataset.lado === "B");
@@ -1309,12 +1329,12 @@ function salvarPlacar(idJogo) {
   atualizarFasesConcluidas();
   avancarFasesAutomaticamente();
   void salvarDados().then((salvo) => {
-    if (salvo) sincronizarElegiveisInterclasse();
+    if (salvo && !modoTestePlacar) sincronizarElegiveisInterclasse();
   });
   renderizar();
 }
 function abrirModalPlacar(idJogo) {
-  if (!exigirOrganizador()) return;
+  if (!exigirEditorPlacar()) return;
   const jogo = campeonato.fases.flatMap(todosOsJogos).find((item) => item.id === idJogo);
   if (!jogo || jogo.folga) return;
   jogoModalAtual = jogo;
@@ -1328,7 +1348,7 @@ function abrirModalPlacar(idJogo) {
   document.getElementById("desistenciaB").textContent = jogo.equipeB + " desistiu";
   const statusApi = document.getElementById("statusApiJogo");
   const recuperar = document.getElementById("recuperarPlacarApi");
-  recuperar.hidden = !jogo.interclasseId;
+  recuperar.hidden = modoTestePlacar || !jogo.interclasseId;
   statusApi.textContent = jogo.interclasseId
     ? `Placar vinculado à API (ID ${jogo.interclasseId}).`
     : jogo.interclasseCriacaoPendente
@@ -1338,7 +1358,7 @@ function abrirModalPlacar(idJogo) {
 }
 function salvarPlacarModal(evento) {
   evento.preventDefault();
-  if (!jogoModalAtual || !exigirOrganizador()) return;
+  if (!jogoModalAtual || !exigirEditorPlacar()) return;
   const inputA = document.getElementById("placarAModal");
   const inputB = document.getElementById("placarBModal");
   const placarPreenchido = inputA.value.trim() !== "" && inputB.value.trim() !== "";
@@ -1371,14 +1391,14 @@ function salvarPlacarModal(evento) {
     avancarFasesAutomaticamente();
   }
   void salvarDados().then((salvo) => {
-    if (salvo) sincronizarElegiveisInterclasse();
+    if (salvo && !modoTestePlacar) sincronizarElegiveisInterclasse();
   });
   document.getElementById("modalPlacar").close();
   jogoModalAtual = null;
   renderizar();
 }
 function registrarDesistencia(lado) {
-  if (!jogoModalAtual || !exigirOrganizador()) return;
+  if (!jogoModalAtual || !exigirEditorPlacar()) return;
   const equipeDesistente = lado === "A" ? jogoModalAtual.equipeA : jogoModalAtual.equipeB;
   if (!confirm(`Confirmar a desistência de ${equipeDesistente}?`)) return;
   jogoModalAtual.desistente = equipeDesistente;
@@ -1388,7 +1408,7 @@ function registrarDesistencia(lado) {
   atualizarFasesConcluidas();
   avancarFasesAutomaticamente();
   void salvarDados().then((salvo) => {
-    if (salvo) sincronizarElegiveisInterclasse();
+    if (salvo && !modoTestePlacar) sincronizarElegiveisInterclasse();
   });
   document.getElementById("modalPlacar").close();
   jogoModalAtual = null;
@@ -1455,8 +1475,9 @@ function renderizar() {
     " • " + nomeFormato(campeonato.formato) + " • " +
     obterQuantidadeQuadras() + (obterQuantidadeQuadras() === 1 ? " quadra" : " quadras");
   document.getElementById("tituloGerenciamento").textContent =
-    ehOrganizador() ? "Gerenciar campeonato" : "Tabela do campeonato";
-  document.getElementById("integracaoInterclasse").hidden = !ehOrganizador();
+    modoTestePlacar ? "Testar placares" : ehOrganizador() ? "Gerenciar campeonato" : "Tabela do campeonato";
+  document.getElementById("integracaoInterclasse").hidden = modoTestePlacar || !ehOrganizador();
+  document.getElementById("avisoTestePlacar").hidden = !modoTestePlacar;
   document.getElementById("iniciarCampeonato").hidden =
     !ehOrganizador() || !campeonato.inscricoesAbertas;
   document.getElementById("editarCampeonato").hidden = !ehOrganizador();
@@ -1520,6 +1541,14 @@ document.getElementById("recuperarPlacarApi").addEventListener("click", () => vo
 async function carregarCampeonatoDaConta({ user, championships: dados, error }) {
   campeonatos = !error ? dados : [];
   campeonato = campeonatos.find((item) => String(item.id) === String(idCampeonato)) || null;
+  if (campeonato && modoTestePlacar) {
+    try {
+      const salvo = JSON.parse(sessionStorage.getItem(chaveTestePlacar));
+      if (salvo && String(salvo.id) === String(idCampeonato)) campeonato = salvo;
+    } catch (storageError) {
+      console.warn("Não foi possível carregar o placar de teste.", storageError);
+    }
+  }
   if (!campeonato) {
     document.getElementById("tituloCampeonato").textContent = error
       ? "Não foi possível carregar os campeonatos"
