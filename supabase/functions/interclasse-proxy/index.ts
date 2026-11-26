@@ -117,7 +117,7 @@ function safeErrorMessage(error: unknown): string {
 }
 
 Deno.serve(async (request: Request) => {
-  const configuredOrigin = Deno.env.get("APP_ORIGIN") || DEFAULT_APP_ORIGIN;
+  const configuredOrigin = new URL(Deno.env.get("APP_ORIGIN") || DEFAULT_APP_ORIGIN).origin;
   const requestOrigin = request.headers.get("Origin") || "";
   if (requestOrigin !== configuredOrigin) {
     return new Response("Origin not allowed.", { status: 403 });
