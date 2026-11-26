@@ -60,6 +60,9 @@
     get(championshipId, gameId, scoreId) {
       return invocar("get", { championshipId, gameId, scoreId });
     },
+    peek(championshipId, gameId, scoreId) {
+      return invocar("peek", { championshipId, gameId, scoreId });
+    },
     listCandidates(championshipId, gameId) {
       return invocar("listCandidates", { championshipId, gameId });
     },

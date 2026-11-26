@@ -144,11 +144,6 @@ Deno.serve(async (request: Request) => {
     return errorResponse("A função não está configurada com os segredos necessários.", 500, configuredOrigin);
   }
 
-  const authorization = request.headers.get("Authorization");
-  if (!authorization) return errorResponse("Autenticação Supabase necessária.", 401, configuredOrigin);
-  const accessToken = authorization.replace(/^Bearer\s+/i, "").trim();
-  if (!accessToken) return errorResponse("Token de sessão Supabase inválido.", 401, configuredOrigin);
-
   let input: JsonRecord;
   try {
     input = await request.json();
@@ -161,6 +156,69 @@ Deno.serve(async (request: Request) => {
   if (!championshipId || championshipId.length > 100) {
     return errorResponse("ID de campeonato inválido.", 400, configuredOrigin);
   }
+
+  // Consultas de teste são públicas, limitadas ao campeonato e ao ID já publicados.
+  if (action === "check" || action === "peek") {
+    const publicClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+    const { data: publicRow, error: publicError } = await publicClient
+      .from("championships")
+      .select("data")
+      .eq("id", championshipId)
+      .maybeSingle();
+    if (publicError) return errorResponse("Não foi possível validar o campeonato.", 500, configuredOrigin);
+    if (!publicRow) return errorResponse("Campeonato não encontrado.", 404, configuredOrigin);
+
+    if (action === "peek") {
+      const publicGameId = String(input.gameId || "");
+      const publicScoreId = String(input.scoreId || "");
+      const publicGame = allGames(publicRow.data as JsonRecord)
+        .find((candidate) => String(candidate.id) === publicGameId);
+      if (!publicGame || !idIsValid(publicScoreId) ||
+          String(publicGame.interclasseId || "") !== publicScoreId) {
+        return errorResponse("Placar não vinculado a esta partida.", 404, configuredOrigin);
+      }
+      let remote;
+      try {
+        remote = await callApi(apiToken, `/placares/${encodeURIComponent(publicScoreId)}`);
+      } catch {
+        return errorResponse("Falha de rede ao consultar a API centralizada.", 503, configuredOrigin);
+      }
+      if (!remote.response.ok) return errorResponse("Não foi possível consultar o placar.", remote.response.status, configuredOrigin);
+      const data = remote.data as JsonRecord | null;
+      let expected;
+      try {
+        expected = apiPayload(publicRow.data as JsonRecord, publicGame);
+      } catch {
+        return errorResponse("A partida publicada não possui equipes válidas.", 400, configuredOrigin);
+      }
+      if (!data || String(data.nome_equipe_a || "").trim() !== expected.nome_equipe_a ||
+          String(data.nome_equipe_b || "").trim() !== expected.nome_equipe_b ||
+          String(data.modalidade || "").trim() !== expected.modalidade) {
+        return errorResponse("O placar remoto não corresponde à partida.", 409, configuredOrigin);
+      }
+      return jsonResponse({
+        pontos_a: data.pontos_a,
+        pontos_b: data.pontos_b,
+        status: data.status,
+        tempo_partida: data.tempo_partida
+      }, 200, configuredOrigin);
+    }
+
+    try {
+      const result = await callApi(apiToken, "/placares");
+      if (!result.response.ok) return errorResponse("A API centralizada recusou a consulta.", result.response.status, configuredOrigin);
+      return jsonResponse({ conectado: true }, 200, configuredOrigin);
+    } catch {
+      return errorResponse("Falha de rede ao conectar à API centralizada.", 503, configuredOrigin);
+    }
+  }
+
+  const authorization = request.headers.get("Authorization");
+  if (!authorization) return errorResponse("Autenticação Supabase necessária.", 401, configuredOrigin);
+  const accessToken = authorization.replace(/^Bearer\s+/i, "").trim();
+  if (!accessToken) return errorResponse("Token de sessão Supabase inválido.", 401, configuredOrigin);
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: authorization } },
@@ -196,13 +254,6 @@ Deno.serve(async (request: Request) => {
       return null;
     }
   };
-
-  if (action === "check") {
-    const result = await fetchApi("/placares");
-    if (!result) return errorResponse("Falha de rede ao conectar à API centralizada.", 503, configuredOrigin);
-    if (!result.response.ok) return apiResponse(result.response, result.text, configuredOrigin);
-    return jsonResponse({ conectado: true }, 200, configuredOrigin);
-  }
 
   if (action === "listCandidates") {
     if (!game) return errorResponse("Informe uma partida local válida.", 400, configuredOrigin);

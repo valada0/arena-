@@ -55,7 +55,7 @@ function atualizarStatusInterclasse(mensagem, estado = "") {
   status.dataset.estado = estado;
   const ultima = document.getElementById("ultimaSincronizacaoInterclasse");
   if (ultima && ultimaSincronizacaoInterclasse) {
-    ultima.textContent = "Última sincronização confirmada: " +
+    ultima.textContent = (modoTestePlacar ? "Última consulta confirmada: " : "Última sincronização confirmada: ") +
       ultimaSincronizacaoInterclasse.toLocaleString("pt-BR");
   }
 }
@@ -213,7 +213,34 @@ function listaPlacaresInterclasse(resposta) {
   return null;
 }
 async function sincronizarJogosInterclasse() {
-  if (!campeonato || !exigirOrganizador()) return;
+  if (!campeonato) return;
+  if (modoTestePlacar) {
+    const botaoTeste = document.getElementById("sincronizarInterclasse");
+    botaoTeste.disabled = true;
+    atualizarStatusInterclasse("Conferindo a API sem enviar alterações...");
+    try {
+      await window.interclasseApi.check(String(campeonato.id));
+      const vinculados = todosJogosCampeonato().filter((jogo) => jogo.interclasseId);
+      let diferentes = 0;
+      for (const jogo of vinculados) {
+        const remoto = await window.interclasseApi.peek(
+          String(campeonato.id), String(jogo.id), String(jogo.interclasseId)
+        );
+        lerEstadoApiInterclasse(jogo, remoto);
+        if (Object.keys(camposPendentesInterclasse(jogo)).length) diferentes++;
+      }
+      atualizarStatusInterclasse(
+        `Prévia concluída: ${vinculados.length} partida(s) vinculada(s), ${diferentes} com diferenças. Nenhum dado foi enviado.`,
+        "ok"
+      );
+    } catch (error) {
+      atualizarStatusInterclasse(mensagemErroInterclasse(error), "erro");
+    } finally {
+      botaoTeste.disabled = false;
+    }
+    return;
+  }
+  if (!exigirOrganizador()) return;
   const botao = document.getElementById("sincronizarInterclasse");
   botao.disabled = true;
   try {
@@ -311,13 +338,13 @@ async function conectarInterclasse() {
   }
 }
 async function recuperarPlacarInterclasse() {
-  if (!jogoModalAtual || !jogoModalAtual.interclasseId || !exigirOrganizador()) return;
+  if (!jogoModalAtual || !jogoModalAtual.interclasseId || !exigirEditorPlacar()) return;
   const status = document.getElementById("statusApiJogo");
   const botao = document.getElementById("recuperarPlacarApi");
   botao.disabled = true;
   status.textContent = "Consultando o mesmo ID na API...";
   try {
-    const dados = await window.interclasseApi.get(
+    const dados = await window.interclasseApi[modoTestePlacar ? "peek" : "get"](
       String(campeonato.id), String(jogoModalAtual.id), jogoModalAtual.interclasseId
     );
     if (!Number.isInteger(dados.pontos_a) || dados.pontos_a < 0 ||
@@ -1348,7 +1375,7 @@ function abrirModalPlacar(idJogo) {
   document.getElementById("desistenciaB").textContent = jogo.equipeB + " desistiu";
   const statusApi = document.getElementById("statusApiJogo");
   const recuperar = document.getElementById("recuperarPlacarApi");
-  recuperar.hidden = modoTestePlacar || !jogo.interclasseId;
+  recuperar.hidden = !jogo.interclasseId;
   statusApi.textContent = jogo.interclasseId
     ? `Placar vinculado à API (ID ${jogo.interclasseId}).`
     : jogo.interclasseCriacaoPendente
@@ -1476,7 +1503,9 @@ function renderizar() {
     obterQuantidadeQuadras() + (obterQuantidadeQuadras() === 1 ? " quadra" : " quadras");
   document.getElementById("tituloGerenciamento").textContent =
     modoTestePlacar ? "Testar placares" : ehOrganizador() ? "Gerenciar campeonato" : "Tabela do campeonato";
-  document.getElementById("integracaoInterclasse").hidden = modoTestePlacar || !ehOrganizador();
+  document.getElementById("integracaoInterclasse").hidden = !podeEditarPlacar();
+  document.getElementById("sincronizarInterclasse").textContent = modoTestePlacar
+    ? "Prévia da sincronização" : "Sincronizar partidas";
   document.getElementById("avisoTestePlacar").hidden = !modoTestePlacar;
   document.getElementById("iniciarCampeonato").hidden =
     !ehOrganizador() || !campeonato.inscricoesAbertas;
