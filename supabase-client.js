@@ -2,22 +2,31 @@
   const PROJECT_URL = "https://sfqbcyjwmymimxhijlut.supabase.co";
   const PUBLISHABLE_KEY = "sb_publishable_SkhHXsXvyjPSFowFtmZ-6w_pJVw_hiS";
   const LEGACY_KEY = "meu-campeonato-v1";
+  const THEME_KEY = "arena-theme";
   const client = window.supabase.createClient(PROJECT_URL, PUBLISHABLE_KEY);
   const authEvents = new EventTarget();
   let currentUser = null;
   let isAdmin = false;
+  let currentTheme = "dark";
   let championships = [];
   let readyResolve;
   let initialized = false;
   const ready = new Promise((resolve) => { readyResolve = resolve; });
 
+  try {
+    currentTheme = localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+  } catch (error) {
+    console.error("Não foi possível carregar o tema salvo.", error);
+  }
+  document.documentElement.dataset.theme = currentTheme;
+
   const authContainer = document.createElement("div");
   authContainer.className = "auth-area";
   authContainer.innerHTML = `
+    <button class="botao botao-config" id="abrirConfiguracoes" type="button">Configurações</button>
     <button class="botao botao-auth" id="abrirAuth" type="button">Entrar</button>
     <div class="auth-logado" id="authLogado" hidden>
       <span id="emailAuth"></span>
-      <button class="botao-sair" id="sairAuth" type="button">Sair</button>
     </div>
   `;
   document.querySelector(".topo").append(authContainer);
@@ -45,6 +54,42 @@
     </form>
   `;
   document.body.append(modalAuth);
+
+  const settingsDialog = document.createElement("dialog");
+  settingsDialog.className = "modal-placar modal-configuracoes";
+  settingsDialog.setAttribute("aria-labelledby", "tituloConfiguracoes");
+  settingsDialog.innerHTML = `
+    <div class="painel-modal">
+      <div class="cabecalho-modal">
+        <div><span class="etiqueta-modal">ARENA+ NA NUVEM</span><h2 id="tituloConfiguracoes">Configurações</h2></div>
+        <button type="button" class="fechar-modal" id="fecharConfiguracoes" aria-label="Fechar">×</button>
+      </div>
+      <section class="configuracoes-secao">
+        <h3>Aparência</h3>
+        <p>Escolha o tema deste navegador.</p>
+        <button type="button" class="aba" id="alternarTema"></button>
+      </section>
+      <section class="configuracoes-secao">
+        <h3>Conta</h3>
+        <p id="infoContaConfiguracoes"></p>
+        <button type="button" class="botao" id="entrarConfiguracoes" hidden>Entrar</button>
+        <button type="button" class="botao-sair" id="sairConfiguracoes" hidden>Sair da conta</button>
+      </section>
+      <section class="configuracoes-secao">
+        <h3>Acesso de administrador</h3>
+        <p id="estadoAdminConfiguracoes" role="status"></p>
+        <form id="formCodigoAdmin" hidden>
+          <label class="campo-edicao" for="codigoAdmin">Código de convite
+            <input id="codigoAdmin" type="password" autocomplete="one-time-code"
+              minlength="20" maxlength="128" required>
+          </label>
+          <button type="submit" class="botao" id="ativarAdmin">Ativar administrador</button>
+          <p class="auth-mensagem" id="mensagemCodigoAdmin" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+    </div>
+  `;
+  document.body.append(settingsDialog);
 
   function dispararDadosCarregados(error = null) {
     authEvents.dispatchEvent(new CustomEvent("data", {
@@ -115,6 +160,37 @@
     abrir.hidden = Boolean(currentUser);
     logado.hidden = !currentUser;
     authContainer.querySelector("#emailAuth").textContent = currentUser ? currentUser.email : "";
+    atualizarConfiguracoes();
+  }
+
+  function atualizarConfiguracoes() {
+    const conectado = Boolean(currentUser);
+    settingsDialog.querySelector("#infoContaConfiguracoes").textContent = currentUser
+      ? `Conectado como ${currentUser.email}.`
+      : "Você não está conectado.";
+    settingsDialog.querySelector("#entrarConfiguracoes").hidden = conectado;
+    settingsDialog.querySelector("#sairConfiguracoes").hidden = !conectado;
+    settingsDialog.querySelector("#formCodigoAdmin").hidden = !conectado || isAdmin;
+    settingsDialog.querySelector("#estadoAdminConfiguracoes").textContent = isAdmin
+      ? "Sua conta já é administradora."
+      : conectado
+        ? "Insira um código de convite de uso único para se tornar administrador."
+        : "Entre na sua conta para usar um código de convite.";
+    const alternarTema = settingsDialog.querySelector("#alternarTema");
+    alternarTema.textContent = currentTheme === "light" ? "Usar tema escuro" : "Usar tema claro";
+    alternarTema.setAttribute("aria-pressed", String(currentTheme === "light"));
+  }
+
+  function definirTema(theme) {
+    currentTheme = theme;
+    document.documentElement.dataset.theme = theme;
+    atualizarConfiguracoes();
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch (error) {
+      console.error("Não foi possível salvar o tema escolhido.", error);
+      throw error;
+    }
   }
 
   async function sincronizarSessao(session) {
@@ -198,6 +274,21 @@
     await sincronizarSessao(null);
   }
 
+  async function reivindicarAdmin(code) {
+    if (!currentUser) throw new Error("Entre na sua conta antes de usar um código de administrador.");
+    const { data, error } = await client.rpc("claim_site_admin", { p_code: code });
+    if (error) throw error;
+    if (typeof data !== "boolean") {
+      throw new Error("A função de convite respondeu em um formato inesperado.");
+    }
+    if (data) {
+      isAdmin = true;
+      dispararDadosCarregados();
+    }
+    atualizarConfiguracoes();
+    return data;
+  }
+
   async function listarInscricoes(championshipId) {
     const { data, error } = await client
       .from("championship_registrations")
@@ -228,6 +319,49 @@
   authContainer.querySelector("#abrirAuth").addEventListener("click", () => {
     modalAuth.querySelector("#mensagemAuth").textContent = "";
     modalAuth.showModal();
+  });
+  authContainer.querySelector("#abrirConfiguracoes").addEventListener("click", () => {
+    atualizarConfiguracoes();
+    settingsDialog.showModal();
+  });
+  settingsDialog.querySelector("#fecharConfiguracoes").addEventListener("click", () => settingsDialog.close());
+  settingsDialog.querySelector("#alternarTema").addEventListener("click", () => {
+    try {
+      definirTema(currentTheme === "light" ? "dark" : "light");
+    } catch (error) {
+      mostrarErro(error);
+    }
+  });
+  settingsDialog.querySelector("#entrarConfiguracoes").addEventListener("click", () => {
+    settingsDialog.close();
+    modalAuth.querySelector("#mensagemAuth").textContent = "";
+    modalAuth.showModal();
+  });
+  settingsDialog.querySelector("#sairConfiguracoes").addEventListener("click", async () => {
+    try {
+      await sair();
+    } catch (error) {
+      mostrarErro(error);
+    }
+  });
+  settingsDialog.querySelector("#formCodigoAdmin").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const codeInput = settingsDialog.querySelector("#codigoAdmin");
+    const submit = settingsDialog.querySelector("#ativarAdmin");
+    const message = settingsDialog.querySelector("#mensagemCodigoAdmin");
+    submit.disabled = true;
+    message.textContent = "Verificando o código...";
+    try {
+      const becameAdmin = await reivindicarAdmin(codeInput.value.trim());
+      codeInput.value = "";
+      message.textContent = becameAdmin
+        ? "Acesso de administrador ativado."
+        : "Sua conta já era administradora.";
+    } catch (error) {
+      message.textContent = error.message || "Não foi possível validar o código.";
+    } finally {
+      submit.disabled = false;
+    }
   });
   modalAuth.querySelector("#fecharAuth").addEventListener("click", () => modalAuth.close());
   modalAuth.querySelector("#formAuth").addEventListener("submit", async (event) => {
@@ -267,14 +401,6 @@
       button.disabled = false;
     }
   });
-  authContainer.querySelector("#sairAuth").addEventListener("click", async () => {
-    try {
-      await sair();
-    } catch (error) {
-      mostrarErro(error);
-    }
-  });
-
   client.auth.onAuthStateChange((_event, session) => {
     if (!initialized) return;
     setTimeout(() => { void sincronizarSessao(session); }, 0);
@@ -293,6 +419,7 @@
     },
     save: salvarCampeonato,
     remove: excluirCampeonato,
+    claimAdmin: reivindicarAdmin,
     listRegistrations: listarInscricoes,
     register: inscrever,
     removeRegistration: removerInscricao,

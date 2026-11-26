@@ -657,3 +657,81 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
   .form-inscricao { grid-template-columns: minmax(0, 1fr); }
   .form-inscricao > .botao { width: 100%; }
 }
+.auth-area { gap: 8px; }
+.botao-config { padding: 9px 13px; font-size: 13px; }
+.modal-configuracoes { width: min(92vw, 520px); max-height: min(85vh, 720px); overflow-y: auto; }
+.configuracoes-secao { display: grid; gap: 9px; margin-top: 20px; padding-top: 17px; border-top: 1px solid var(--borda); }
+.configuracoes-secao h3 { font-size: 15px; }
+.configuracoes-secao > p { color: var(--secundario); font-size: 13px; }
+#formCodigoAdmin { display: grid; gap: 12px; }
+#formCodigoAdmin .auth-mensagem { margin-top: 0; overflow-wrap: anywhere; }
+#formCodigoAdmin button:disabled { cursor: wait; opacity: .65; }
+:root[data-theme="light"] {
+  --fundo: #f3f5f7;
+  --painel: #ffffff;
+  --texto: #20272d;
+  --secundario: #5b6670;
+  --verde: #16845f;
+  --borda: #d7dde2;
+}
+:root[data-theme="light"] .topo { background: var(--painel); border-bottom: 1px solid var(--borda); }
+:root[data-theme="light"] .topo nav { color: var(--texto); }
+:root[data-theme="light"] .apresentacao { background: linear-gradient(110deg, #e6f4ee, #e9f1f5 60%, #f3f5f7); }
+:root[data-theme="light"] .modal-placar[open] {
+  background: var(--painel);
+  box-shadow: 0 28px 80px rgba(28, 42, 52, .22);
+}
+:root[data-theme="light"] .fechar-modal { border-color: var(--borda); background: #f0f3f5; color: var(--texto); }
+:root[data-theme="light"] .fechar-modal:hover { background: #e3e8eb; color: var(--texto); }
+:root[data-theme="light"] #formCampeonato input,
+:root[data-theme="light"] #formCampeonato select,
+:root[data-theme="light"] .campo-edicao input,
+:root[data-theme="light"] .campo-edicao textarea,
+:root[data-theme="light"] .campo-edicao select,
+:root[data-theme="light"] .campos-placar-modal input,
+:root[data-theme="light"] .controles-quadra select,
+:root[data-theme="light"] .placar input,
+:root[data-theme="light"] .placar-chave input,
+:root[data-theme="light"] .form-inscricao input {
+  color: var(--texto);
+  background: #ffffff;
+  border-color: var(--borda);
+}
+:root[data-theme="light"] .painel-inscricoes { background: linear-gradient(180deg, #edf5f1, var(--fundo)); }
+:root[data-theme="light"] .status-inscricoes,
+:root[data-theme="light"] .item-inscricao,
+:root[data-theme="light"] .form-inscricao,
+:root[data-theme="light"] .bloco-chaveamento,
+:root[data-theme="light"] .bloco-fase,
+:root[data-theme="light"] .bloco-jogo,
+:root[data-theme="light"] .bloco-classificacao,
+:root[data-theme="light"] .partida-chave,
+:root[data-theme="light"] .bloco-jogo-chave,
+:root[data-theme="light"] .cartao-podio {
+  color: var(--texto);
+  background: var(--painel);
+  border-color: var(--borda);
+}
+:root[data-theme="light"] .form-inscricao label,
+:root[data-theme="light"] .equipe-chave strong { color: var(--texto); }
+:root[data-theme="light"] .equipe-chave,
+:root[data-theme="light"] .fluxo-chave .bloco-jogo-chave .nome-equipe,
+:root[data-theme="light"] .bloco-jogo-chave .placar-resumo {
+  color: var(--texto);
+  border-color: var(--borda);
+}
+:root[data-theme="light"] .bloco-chaveamento,
+:root[data-theme="light"] .partida-chave,
+:root[data-theme="light"] .bloco-jogo-chave,
+:root[data-theme="light"] .fluxo-chave .bloco-jogo-chave,
+:root[data-theme="light"] .podio-campeonato,
+:root[data-theme="light"] .cartao-podio {
+  background: var(--painel);
+  box-shadow: none;
+}
+:root[data-theme="light"] .bloco-jogo-chave .placar-resumo { background: #f0f3f5; }
+:root[data-theme="light"] .cabecalho-podio h3 { color: #5c4a00; }
+:root[data-theme="light"] .equipe-chave.vencedora { color: #116b4d; }
+:root[data-theme="light"] .equipe-chave.vencedora strong { color: var(--verde); }
+:root[data-theme="light"] .status-inscricoes.abertas { color: #116b4d; }
+:root[data-theme="light"] .status-inscricoes.encerradas { color: #765317; }

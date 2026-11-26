@@ -171,7 +171,10 @@ async function excluirCampeonato(id) {
 function renderizarTudo() {
   renderizarDestaque();
   renderizarListaCampeonatos();
-  document.querySelector(".painel-criacao").hidden = !window.arenaStore.isAdmin;
+  const isAdmin = window.arenaStore.isAdmin;
+  document.querySelector(".painel-criacao").hidden = !isAdmin;
+  document.querySelector('.topo nav a[href="#criar"]').hidden = !isAdmin;
+  document.querySelector('.apresentacao a[href="#criar"]').hidden = !isAdmin;
 }
 document.getElementById("entrarParaCriar").addEventListener("click", () => window.arenaStore.openAuth());
 document.getElementById("formCampeonato").addEventListener("submit", (evento) => {
