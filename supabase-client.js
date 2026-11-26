@@ -5,6 +5,7 @@
   const client = window.supabase.createClient(PROJECT_URL, PUBLISHABLE_KEY);
   const authEvents = new EventTarget();
   let currentUser = null;
+  let isAdmin = false;
   let championships = [];
   let readyResolve;
   let initialized = false;
@@ -47,7 +48,7 @@
 
   function dispararDadosCarregados(error = null) {
     authEvents.dispatchEvent(new CustomEvent("data", {
-      detail: { user: currentUser, championships: [...championships], error }
+      detail: { user: currentUser, isAdmin, championships: [...championships], error }
     }));
   }
 
@@ -62,7 +63,7 @@
   }
 
   async function importarDadosLegados() {
-    if (!currentUser) return;
+    if (!currentUser || !isAdmin) return;
     const existentes = new Set(championships.map((item) => String(item.id)));
     const antigos = lerCampeonatosLegados()
       .filter((item) => !existentes.has(String(item.id)));
@@ -84,6 +85,17 @@
   }
 
   async function carregarCampeonatos() {
+    isAdmin = false;
+    if (currentUser) {
+      const { data: admin, error: adminError } = await client
+        .from("site_admins")
+        .select("user_id")
+        .eq("user_id", currentUser.id)
+        .maybeSingle();
+      if (adminError) throw adminError;
+      isAdmin = Boolean(admin);
+    }
+
     const { data, error } = await client
       .from("championships")
       .select("id,user_id,data")
@@ -93,7 +105,7 @@
       ...row.data,
       ownerId: row.user_id
     }));
-    if (currentUser) await importarDadosLegados();
+    if (isAdmin) await importarDadosLegados();
     dispararDadosCarregados();
   }
 
@@ -115,6 +127,7 @@
         readyResolve();
       }
     } catch (error) {
+      isAdmin = false;
       championships = [];
       dispararDadosCarregados(error);
       if (!initialized) {
@@ -134,6 +147,10 @@
 
   async function salvarCampeonato(data) {
     if (!currentUser) throw new Error("Entre na sua conta para salvar campeonatos.");
+    const alreadyExists = championships.some((item) => String(item.id) === String(data.id));
+    if (!isAdmin && !alreadyExists) {
+      throw new Error("Somente administradores podem criar campeonatos.");
+    }
     if (data.ownerId && data.ownerId !== currentUser.id) {
       throw new Error("Somente o organizador pode editar este campeonato.");
     }
@@ -267,6 +284,7 @@
     client,
     ready,
     get user() { return currentUser; },
+    get isAdmin() { return isAdmin; },
     get championships() { return [...championships]; },
     onData(callback) {
       const listener = (event) => callback(event.detail);

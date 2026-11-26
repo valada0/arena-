@@ -106,7 +106,7 @@ function renderizarListaCampeonatos() {
   total.textContent = campeonatos.length +
     (campeonatos.length === 1 ? " campeonato" : " campeonatos");
   vazio.hidden = campeonatos.length > 0;
-  vazio.textContent = "Ainda não há campeonatos. Crie o primeiro!";
+  vazio.textContent = "Ainda não há campeonatos disponíveis no momento.";
 
   campeonatos.forEach((campeonato) => {
     const cartao = document.createElement("article");
@@ -171,9 +171,7 @@ async function excluirCampeonato(id) {
 function renderizarTudo() {
   renderizarDestaque();
   renderizarListaCampeonatos();
-  const conectado = Boolean(window.arenaStore.user);
-  document.getElementById("entrarParaCriar").hidden = conectado;
-  document.querySelector("#formCampeonato button[type='submit']").hidden = !conectado;
+  document.querySelector(".painel-criacao").hidden = !window.arenaStore.isAdmin;
 }
 document.getElementById("entrarParaCriar").addEventListener("click", () => window.arenaStore.openAuth());
 document.getElementById("formCampeonato").addEventListener("submit", (evento) => {
