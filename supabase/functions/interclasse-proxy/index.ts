@@ -144,6 +144,11 @@ Deno.serve(async (request: Request) => {
     return errorResponse("A função não está configurada com os segredos necessários.", 500, configuredOrigin);
   }
 
+  const authorization = request.headers.get("Authorization");
+  if (!authorization) return errorResponse("Autenticação Supabase necessária.", 401, configuredOrigin);
+  const accessToken = authorization.replace(/^Bearer\s+/i, "").trim();
+  if (!accessToken) return errorResponse("Token de sessão Supabase inválido.", 401, configuredOrigin);
+
   let input: JsonRecord;
   try {
     input = await request.json();
@@ -156,198 +161,6 @@ Deno.serve(async (request: Request) => {
   if (!championshipId || championshipId.length > 100) {
     return errorResponse("ID de campeonato inválido.", 400, configuredOrigin);
   }
-
-  // Consultas de teste são públicas, limitadas ao campeonato e ao ID já publicados.
-  if (action === "check" || action === "peek") {
-    const publicClient = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { persistSession: false, autoRefreshToken: false }
-    });
-    const { data: publicRow, error: publicError } = await publicClient
-      .from("championships")
-      .select("data")
-      .eq("id", championshipId)
-      .maybeSingle();
-    if (publicError) return errorResponse("Não foi possível validar o campeonato.", 500, configuredOrigin);
-    if (!publicRow) return errorResponse("Campeonato não encontrado.", 404, configuredOrigin);
-
-    if (action === "peek") {
-      const publicGameId = String(input.gameId || "");
-      const publicScoreId = String(input.scoreId || "");
-      const publicGame = allGames(publicRow.data as JsonRecord)
-        .find((candidate) => String(candidate.id) === publicGameId);
-      if (!publicGame || !idIsValid(publicScoreId) ||
-          String(publicGame.interclasseId || "") !== publicScoreId) {
-        return errorResponse("Placar não vinculado a esta partida.", 404, configuredOrigin);
-      }
-      let remote;
-      try {
-        remote = await callApi(apiToken, `/placares/${encodeURIComponent(publicScoreId)}`);
-      } catch {
-        return errorResponse("Falha de rede ao consultar a API centralizada.", 503, configuredOrigin);
-      }
-      if (!remote.response.ok) return errorResponse("Não foi possível consultar o placar.", remote.response.status, configuredOrigin);
-      const data = remote.data as JsonRecord | null;
-      let expected;
-      try {
-        expected = apiPayload(publicRow.data as JsonRecord, publicGame);
-      } catch {
-        return errorResponse("A partida publicada não possui equipes válidas.", 400, configuredOrigin);
-      }
-      if (!data || String(data.nome_equipe_a || "").trim() !== expected.nome_equipe_a ||
-          String(data.nome_equipe_b || "").trim() !== expected.nome_equipe_b ||
-          String(data.modalidade || "").trim() !== expected.modalidade) {
-        return errorResponse("O placar remoto não corresponde à partida.", 409, configuredOrigin);
-      }
-      return jsonResponse({
-        pontos_a: data.pontos_a,
-        pontos_b: data.pontos_b,
-        status: data.status,
-        tempo_partida: data.tempo_partida
-      }, 200, configuredOrigin);
-    }
-
-    try {
-      const result = await callApi(apiToken, "/placares");
-      if (!result.response.ok) return errorResponse("A API centralizada recusou a consulta.", result.response.status, configuredOrigin);
-      return jsonResponse({ conectado: true }, 200, configuredOrigin);
-    } catch {
-      return errorResponse("Falha de rede ao conectar à API centralizada.", 503, configuredOrigin);
-    }
-  }
-
-  if (action === "testSync" || action === "testGet") {
-    const testChampionshipId = Deno.env.get("TEST_CHAMPIONSHIP_ID");
-    const testCodeHash = Deno.env.get("TEST_SCORE_CODE_HASH")?.toLowerCase();
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!testChampionshipId || !testCodeHash || !serviceRoleKey) {
-      return errorResponse("O envio de teste não está configurado.", 503, configuredOrigin);
-    }
-    if (championshipId !== testChampionshipId || !/^[0-9a-f]{64}$/.test(testCodeHash)) {
-      return errorResponse("Campeonato de teste não autorizado.", 403, configuredOrigin);
-    }
-    const testCode = String(input.testCode || "");
-    if (testCode.length < 16 || testCode.length > 128) {
-      return errorResponse("Código de teste inválido.", 403, configuredOrigin);
-    }
-    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(testCode)));
-    const suppliedHash = Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
-    if (suppliedHash !== testCodeHash) {
-      return errorResponse("Código de teste inválido.", 403, configuredOrigin);
-    }
-    const gameId = String(input.gameId || "");
-    const pointsA = input.pontos_a;
-    const pointsB = input.pontos_b;
-    if (!idIsValid(gameId) || (action === "testSync" &&
-        (!Number.isInteger(pointsA) || !Number.isInteger(pointsB) ||
-          Number(pointsA) < 0 || Number(pointsB) < 0))) {
-      return errorResponse("Partida ou placar de teste inválido.", 400, configuredOrigin);
-    }
-    const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false }
-    });
-    const { data: testRow, error: testRowError } = await serviceClient
-      .from("championships")
-      .select("user_id,data")
-      .eq("id", championshipId)
-      .maybeSingle();
-    if (testRowError || !testRow) return errorResponse("Campeonato de teste não encontrado.", 404, configuredOrigin);
-    const testGame = allGames(testRow.data as JsonRecord)
-      .find((candidate) => String(candidate.id) === gameId);
-    if (!testGame) return errorResponse("Partida não publicada neste campeonato.", 404, configuredOrigin);
-    let payload;
-    try {
-      payload = apiPayload(testRow.data as JsonRecord, testGame);
-    } catch {
-      return errorResponse("A partida não possui equipes válidas.", 400, configuredOrigin);
-    }
-    if (String(input.nomeEquipeA || "").trim() !== payload.nome_equipe_a ||
-        String(input.nomeEquipeB || "").trim() !== payload.nome_equipe_b) {
-      return errorResponse("As equipes do teste diferem da partida publicada.", 409, configuredOrigin);
-    }
-    const linkQuery = () => serviceClient.from(LINK_TABLE)
-      .select("api_score_id,creation_state")
-      .eq("championship_id", championshipId)
-      .eq("game_id", gameId)
-      .maybeSingle();
-    const { data: link, error: linkError } = await linkQuery();
-    if (linkError) return errorResponse("Não foi possível verificar o vínculo da partida.", 500, configuredOrigin);
-    if (link && !link.api_score_id) {
-      return errorResponse("Há uma criação pendente para esta partida. Confira a API antes de repetir.", 409, configuredOrigin);
-    }
-    let scoreId = link?.api_score_id || (idIsValid(testGame.interclasseId) ? String(testGame.interclasseId) : "");
-    if (action === "testGet" && !scoreId) {
-      return errorResponse("Esta partida ainda não tem placar na API.", 404, configuredOrigin);
-    }
-    if (scoreId) {
-      let remote;
-      try {
-        remote = await callApi(apiToken, `/placares/${encodeURIComponent(scoreId)}`);
-      } catch {
-        return errorResponse("Falha ao conferir o placar existente na API.", 503, configuredOrigin);
-      }
-      const remoteData = remote.data as JsonRecord | null;
-      if (!remote.response.ok || !remoteData ||
-          String(remoteData.nome_equipe_a || "").trim() !== payload.nome_equipe_a ||
-          String(remoteData.nome_equipe_b || "").trim() !== payload.nome_equipe_b ||
-          String(remoteData.modalidade || "").trim() !== payload.modalidade) {
-        return errorResponse("O vínculo não corresponde à partida publicada.", 409, configuredOrigin);
-      }
-      if (action === "testGet") {
-        return jsonResponse({
-          id: scoreId,
-          pontos_a: remoteData.pontos_a,
-          pontos_b: remoteData.pontos_b,
-          status: remoteData.status,
-          tempo_partida: remoteData.tempo_partida
-        }, 200, configuredOrigin);
-      }
-    } else {
-      const { error: reserveError } = await serviceClient.from(LINK_TABLE).insert({
-        championship_id: championshipId,
-        game_id: gameId,
-        user_id: testRow.user_id,
-        creation_state: "creating"
-      });
-      if (reserveError) return errorResponse("Outra sessão iniciou a criação. Confira a API antes de repetir.", 409, configuredOrigin);
-      let created;
-      try {
-        created = await callApi(apiToken, "/placares/criar", "POST", payload);
-      } catch {
-        await serviceClient.from(LINK_TABLE).update({ creation_state: "ambiguous" })
-          .eq("championship_id", championshipId).eq("game_id", gameId);
-        return errorResponse("Criação sem confirmação. Confira a API antes de repetir.", 503, configuredOrigin);
-      }
-      if (!created.response.ok || !created.data || !idIsValid((created.data as JsonRecord).id)) {
-        await serviceClient.from(LINK_TABLE).update({
-          creation_state: created.response.status >= 500 ? "ambiguous" : "failed"
-        }).eq("championship_id", championshipId).eq("game_id", gameId);
-        return errorResponse("Não foi possível confirmar a criação do placar.", 502, configuredOrigin);
-      }
-      scoreId = String((created.data as JsonRecord).id);
-      const { error: saveLinkError } = await serviceClient.from(LINK_TABLE).update({
-        api_score_id: scoreId,
-        creation_state: "created"
-      }).eq("championship_id", championshipId).eq("game_id", gameId);
-      if (saveLinkError) return errorResponse("Placar criado, mas o vínculo não foi salvo. Confira a API antes de repetir.", 500, configuredOrigin);
-    }
-    let updated;
-    try {
-      updated = await callApi(apiToken, `/placares/${encodeURIComponent(scoreId)}`, "PATCH", {
-        pontos_a: pointsA,
-        pontos_b: pointsB,
-        status: "encerrado"
-      });
-    } catch {
-      return errorResponse("Falha ao enviar o placar. Verifique a API antes de repetir.", 503, configuredOrigin);
-    }
-    if (!updated.response.ok) return errorResponse("A API recusou o placar de teste.", updated.response.status, configuredOrigin);
-    return jsonResponse({ id: scoreId, pontos_a: pointsA, pontos_b: pointsB, status: "encerrado" }, 200, configuredOrigin);
-  }
-
-  const authorization = request.headers.get("Authorization");
-  if (!authorization) return errorResponse("Autenticação Supabase necessária.", 401, configuredOrigin);
-  const accessToken = authorization.replace(/^Bearer\s+/i, "").trim();
-  if (!accessToken) return errorResponse("Token de sessão Supabase inválido.", 401, configuredOrigin);
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: authorization } },
@@ -383,6 +196,13 @@ Deno.serve(async (request: Request) => {
       return null;
     }
   };
+
+  if (action === "check") {
+    const result = await fetchApi("/placares");
+    if (!result) return errorResponse("Falha de rede ao conectar à API centralizada.", 503, configuredOrigin);
+    if (!result.response.ok) return apiResponse(result.response, result.text, configuredOrigin);
+    return jsonResponse({ conectado: true }, 200, configuredOrigin);
+  }
 
   if (action === "listCandidates") {
     if (!game) return errorResponse("Informe uma partida local válida.", 400, configuredOrigin);
