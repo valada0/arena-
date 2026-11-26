@@ -204,8 +204,8 @@ document.getElementById("formCampeonato").addEventListener("submit", (evento) =>
   });
 });
 
-window.arenaStore.onData(({ user, championships: dados, error }) => {
-  campeonatos = user && !error ? dados : [];
+window.arenaStore.onData(({ championships: dados, error }) => {
+  campeonatos = !error ? dados : [];
   renderizarTudo();
 });
 window.arenaStore.ready.then(() => {
